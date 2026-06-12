@@ -1,0 +1,3 @@
+Alembic migrations live in this directory.
+
+Phase 1 includes the migration scaffold only. Database tables will be added in later phases.

@@ -1,0 +1,27 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Docker and local runtime files
+postgres_data/
+
+# Frontend/build artifacts for later phases
+node_modules/
+dist/
+build/
