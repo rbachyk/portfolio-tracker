@@ -1,5 +1,155 @@
-from sqlalchemy.orm import DeclarativeBase
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class Symbol(Base):
+    __tablename__ = "symbols"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    base_asset_code: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("assets.code"), index=True
+    )
+    quote_asset_code: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("assets.code"), index=True
+    )
+    status: Mapped[str | None] = mapped_column(String(32), index=True)
+    is_spot_trading_allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    raw_payload: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    base_asset: Mapped[Asset | None] = relationship(
+        "Asset", foreign_keys=[base_asset_code], primaryjoin=base_asset_code == Asset.code
+    )
+    quote_asset: Mapped[Asset | None] = relationship(
+        "Asset", foreign_keys=[quote_asset_code], primaryjoin=quote_asset_code == Asset.code
+    )
+
+
+class PriceSnapshot(Base):
+    __tablename__ = "price_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol_id: Mapped[int] = mapped_column(ForeignKey("symbols.id"), index=True, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), default="binance_ticker_price", nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    raw_payload: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    symbol_ref: Mapped[Symbol] = relationship("Symbol")
+
+
+class SyncState(Base):
+    __tablename__ = "sync_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    last_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+Index("ix_price_snapshots_symbol_observed_at", PriceSnapshot.symbol, PriceSnapshot.observed_at)
+
+
+class RawBinanceEvent(Base):
+    __tablename__ = "raw_binance_events"
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uq_raw_binance_events_source_external_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    event_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class Trade(Base):
+    __tablename__ = "trades"
+    __table_args__ = (
+        UniqueConstraint("symbol", "binance_trade_id", name="uq_trades_symbol_binance_trade_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol_id: Mapped[int] = mapped_column(ForeignKey("symbols.id"), index=True, nullable=False)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    base_asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    quote_asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    side: Mapped[str] = mapped_column(String(8), index=True, nullable=False)
+    binance_trade_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    binance_order_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    binance_order_list_id: Mapped[int | None] = mapped_column(BigInteger)
+    price: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    quote_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    fee_asset_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    fee_amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=False
+    )
+    is_buyer: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_maker: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_best_match: Mapped[bool | None] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+    symbol_ref: Mapped[Symbol] = relationship("Symbol")

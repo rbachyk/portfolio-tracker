@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format db-up db-down migrate makemigration docker-up docker-down
+.PHONY: help install dev test lint format db-up db-down migrate migrate-local makemigration docker-up docker-down
 
 UV := uv
 COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf "docker compose"; else printf "docker-compose"; fi)
@@ -12,7 +12,8 @@ help:
 	@printf "  make format        Format backend code\n"
 	@printf "  make db-up         Start PostgreSQL only\n"
 	@printf "  make db-down       Stop PostgreSQL\n"
-	@printf "  make migrate       Apply Alembic migrations\n"
+	@printf "  make migrate       Apply Alembic migrations through Docker Compose\n"
+	@printf "  make migrate-local Apply Alembic migrations from the host\n"
 	@printf "  make docker-up     Start the full Compose stack\n"
 	@printf "  make docker-down   Stop the full Compose stack\n"
 
@@ -38,6 +39,9 @@ db-down:
 	$(COMPOSE) stop postgres
 
 migrate:
+	$(COMPOSE) run --rm --build backend uv run --no-sync alembic upgrade head
+
+migrate-local:
 	$(UV) run --project backend alembic -c backend/alembic.ini upgrade head
 
 makemigration:

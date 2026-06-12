@@ -2,9 +2,9 @@
 
 Production-oriented Binance Spot portfolio tracker with ledger-based accounting, Simple Earn support, PostgreSQL persistence, FastAPI backend, and a React dashboard planned for later phases.
 
-## Phase 1 Scope
+## Current Scope
 
-This phase creates the backend foundation only:
+Implemented so far:
 
 - FastAPI application skeleton
 - `/health` and `/health/db` endpoints
@@ -13,8 +13,14 @@ This phase creates the backend foundation only:
 - Docker Compose for backend and PostgreSQL
 - Local development Makefile
 - Basic backend tests
+- Binance Spot REST client for read-only account, exchange info, and ticker price calls
+- Binance HMAC signing helper
+- Symbol configuration tables and price snapshot storage
+- Exchange info and price sync functions with mocked tests
+- Spot trade sync for configured symbols
+- Raw Binance event storage and normalized trade storage with idempotency
 
-Binance API integration, accounting logic, authentication, and the frontend dashboard are intentionally not implemented yet.
+Earn sync, accounting logic, authentication, and the frontend dashboard are intentionally not implemented yet.
 
 ## Requirements
 
@@ -69,7 +75,7 @@ make docker-down
 make test
 ```
 
-The Phase 1 tests cover the application skeleton and health endpoint. They do not require a running database.
+The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, and trade sync idempotency with mocked Binance responses. They do not call Binance.
 
 ## Migrations
 
@@ -79,18 +85,33 @@ Apply migrations:
 make migrate
 ```
 
+`make migrate` runs Alembic inside the Docker Compose backend container so it connects
+to the `postgres` service directly. To run Alembic from the host instead, use:
+
+```bash
+make migrate-local
+```
+
 Create a migration after adding models:
 
 ```bash
 make makemigration m="describe change"
 ```
 
+## Trade Sync Backfill
+
+Before the first Spot trade sync, set `BINANCE_TRADE_SYNC_START_MS` to a Unix
+timestamp in milliseconds earlier than the first trade you want tracked. The sync
+refuses an initial backfill without this value so it cannot silently ingest only
+Binance's most recent trade page.
+
 ## Security Notes
 
 - Do not commit `.env` or any local secret file.
 - `.env.example` contains development placeholders only.
-- Binance API credentials are not part of Phase 1.
-- Future Binance API credentials must be read from environment variables or another git-ignored local secret source.
+- Binance API credentials are read from environment variables only.
+- `BINANCE_API_KEY` and `BINANCE_API_SECRET` must stay in `.env` or another git-ignored secret source.
+- Use a read-only Binance API key. Do not enable trading permissions for this application.
 
 ## Suggested Commit
 
