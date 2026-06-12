@@ -288,3 +288,54 @@ class EarnReward(Base):
     )
 
     raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class LedgerEvent(Base):
+    __tablename__ = "ledger_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    source_table: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    source_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    quote_asset_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    quote_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    fee_asset_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    fee_amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    event_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=False
+    )
+    event_metadata: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class Lot(Base):
+    __tablename__ = "lots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_ledger_event_id: Mapped[int] = mapped_column(
+        ForeignKey("ledger_events.id"), index=True, nullable=False
+    )
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    source_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    original_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total_cost_basis: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    realized_pnl: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    is_reward: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    source_ledger_event: Mapped[LedgerEvent] = relationship("LedgerEvent")

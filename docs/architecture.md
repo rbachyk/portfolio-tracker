@@ -54,10 +54,24 @@ Earn subscriptions and redemptions are stored as movement records, not profit/lo
 events. Earn rewards are stored separately with `cost_basis_mode = ZERO`, preserving
 the current accounting assumption for Phase 5.
 
+## Phase 5
+
+Accounting now runs from normalized ledger events instead of current balances.
+`ledger_events` provides the auditable event stream built from trades, wallet
+history, and Simple Earn records. `lots` stores the rebuilt FIFO cost-basis state.
+
+Spot buys create acquisition lots, and spot sells consume the oldest open lots
+first while recording realized PnL on the consumed quantity. Earn rewards create
+zero-cost acquisition lots so reward quantity and reward value can be reported
+separately from market price movement. Earn subscriptions and redemptions remain
+movement events only; they do not create or consume lots.
+
+The accounting module exposes lot-level and symbol-level PnL helpers. FIFO is
+the only implemented cost-basis method in this phase; LIFO, HIFO, and average
+cost are reserved for future work.
+
 ## Planned Later Phases
 
-- Ledger event normalization
-- FIFO lot accounting and PnL calculations
 - Portfolio snapshots and performance endpoints
 - Password-protected React dashboard
 - Production deployment documentation

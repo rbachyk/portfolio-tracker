@@ -21,8 +21,11 @@ Implemented so far:
 - Raw Binance event storage and normalized trade storage with idempotency
 - Deposit and withdrawal history sync
 - Simple Earn positions, subscriptions, redemptions, and rewards sync
+- Ledger event builder for normalized accounting inputs
+- FIFO lot accounting with realized/unrealized PnL helpers
+- Symbol-level and lot-level PnL calculations
 
-Accounting logic, authentication, and the frontend dashboard are intentionally not implemented yet.
+Portfolio snapshots, authentication, and the frontend dashboard are intentionally not implemented yet.
 
 ## Requirements
 
@@ -77,7 +80,19 @@ make docker-down
 make test
 ```
 
-The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, and Simple Earn sync with mocked Binance responses. They do not call Binance.
+The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, Simple Earn sync, and FIFO accounting behavior with mocked inputs. They do not call Binance.
+
+## Accounting
+
+The accounting engine currently supports FIFO lot rebuilding only. LIFO, HIFO,
+and average cost are reserved for later phases and intentionally rejected if
+selected.
+
+Spot buys create acquisition lots. Spot sells consume open lots using FIFO and
+record realized PnL on the consumed quantity. Earn rewards create zero-cost lots
+and can be reported separately from market price movement. Earn subscriptions
+and redemptions are ledger movement events only; they do not create PnL or cost
+basis changes.
 
 ## Migrations
 
