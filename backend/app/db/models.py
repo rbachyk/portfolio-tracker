@@ -153,3 +153,138 @@ class Trade(Base):
 
     raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
     symbol_ref: Mapped[Symbol] = relationship("Symbol")
+
+
+class Deposit(Base):
+    __tablename__ = "deposits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    network: Mapped[str | None] = mapped_column(String(64), index=True)
+    status: Mapped[int | None] = mapped_column(Integer, index=True)
+    address: Mapped[str | None] = mapped_column(Text)
+    address_tag: Mapped[str | None] = mapped_column(String(256))
+    tx_id: Mapped[str | None] = mapped_column(String(512), index=True)
+    transfer_type: Mapped[int | None] = mapped_column(Integer)
+    wallet_type: Mapped[int | None] = mapped_column(Integer)
+    inserted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class Withdrawal(Base):
+    __tablename__ = "withdrawals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    transaction_fee: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    network: Mapped[str | None] = mapped_column(String(64), index=True)
+    status: Mapped[int | None] = mapped_column(Integer, index=True)
+    address: Mapped[str | None] = mapped_column(Text)
+    tx_id: Mapped[str | None] = mapped_column(String(512), index=True)
+    withdraw_order_id: Mapped[str | None] = mapped_column(String(256), index=True)
+    transfer_type: Mapped[int | None] = mapped_column(Integer)
+    wallet_type: Mapped[int | None] = mapped_column(Integer)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class EarnPosition(Base):
+    __tablename__ = "earn_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    product_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    product_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    auto_subscribe: Mapped[bool | None] = mapped_column(Boolean)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class EarnSubscription(Base):
+    __tablename__ = "earn_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    product_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    purchase_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    product_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    source_endpoint: Mapped[str] = mapped_column(String(128), nullable=False)
+    subscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class EarnRedemption(Base):
+    __tablename__ = "earn_redemptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    product_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    redeem_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    product_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    source_endpoint: Mapped[str] = mapped_column(String(128), nullable=False)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class EarnReward(Base):
+    __tablename__ = "earn_rewards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    product_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    product_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    reward_type: Mapped[str | None] = mapped_column(String(64), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    cost_basis_mode: Mapped[str] = mapped_column(String(32), default="ZERO", nullable=False)
+    source_endpoint: Mapped[str] = mapped_column(String(128), nullable=False)
+    rewarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")

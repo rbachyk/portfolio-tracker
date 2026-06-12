@@ -90,6 +90,154 @@ class BinanceClient:
             },
         )
 
+    def get_deposit_history(
+        self,
+        *,
+        coin: str | None = None,
+        status: int | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        offset: int = 0,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        return self._get_signed(
+            endpoints.DEPOSIT_HISTORY,
+            params={
+                "coin": coin,
+                "status": status,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "offset": offset,
+                "limit": limit,
+            },
+        )
+
+    def get_withdraw_history(
+        self,
+        *,
+        coin: str | None = None,
+        status: int | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        offset: int = 0,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        return self._get_signed(
+            endpoints.WITHDRAW_HISTORY,
+            params={
+                "coin": coin,
+                "status": status,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "offset": offset,
+                "limit": limit,
+            },
+        )
+
+    def get_simple_earn_flexible_positions(
+        self,
+        *,
+        asset: str | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        return self._get_signed(
+            endpoints.EARN_FLEXIBLE_POSITIONS,
+            params={"asset": asset, "current": current, "size": size},
+        )
+
+    def get_simple_earn_locked_positions(
+        self,
+        *,
+        asset: str | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        return self._get_signed(
+            endpoints.EARN_LOCKED_POSITIONS,
+            params={"asset": asset, "current": current, "size": size},
+        )
+
+    def get_simple_earn_subscription_records(
+        self,
+        *,
+        product_type: str,
+        asset: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        endpoint = self._simple_earn_history_endpoint(
+            product_type,
+            flexible_endpoint=endpoints.EARN_FLEXIBLE_SUBSCRIPTIONS,
+            locked_endpoint=endpoints.EARN_LOCKED_SUBSCRIPTIONS,
+        )
+        return self._get_signed(
+            endpoint,
+            params={
+                "asset": asset,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "current": current,
+                "size": size,
+            },
+        )
+
+    def get_simple_earn_redemption_records(
+        self,
+        *,
+        product_type: str,
+        asset: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        endpoint = self._simple_earn_history_endpoint(
+            product_type,
+            flexible_endpoint=endpoints.EARN_FLEXIBLE_REDEMPTIONS,
+            locked_endpoint=endpoints.EARN_LOCKED_REDEMPTIONS,
+        )
+        return self._get_signed(
+            endpoint,
+            params={
+                "asset": asset,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "current": current,
+                "size": size,
+            },
+        )
+
+    def get_simple_earn_rewards_history(
+        self,
+        *,
+        product_type: str,
+        asset: str | None = None,
+        reward_type: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        endpoint = self._simple_earn_history_endpoint(
+            product_type,
+            flexible_endpoint=endpoints.EARN_FLEXIBLE_REWARDS,
+            locked_endpoint=endpoints.EARN_LOCKED_REWARDS,
+        )
+        return self._get_signed(
+            endpoint,
+            params={
+                "asset": asset,
+                "type": reward_type,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "current": current,
+                "size": size,
+            },
+        )
+
     def get_exchange_info(self, symbols: Sequence[str] | None = None) -> dict[str, Any]:
         return self._get_public(endpoints.EXCHANGE_INFO, params=self._symbol_params(symbols))
 
@@ -149,3 +297,17 @@ class BinanceClient:
         if len(normalized_symbols) == 1:
             return {"symbol": normalized_symbols[0]}
         return {"symbols": json.dumps(normalized_symbols, separators=(",", ":"))}
+
+    @staticmethod
+    def _simple_earn_history_endpoint(
+        product_type: str,
+        *,
+        flexible_endpoint: str,
+        locked_endpoint: str,
+    ) -> str:
+        normalized_product_type = product_type.strip().lower()
+        if normalized_product_type == "flexible":
+            return flexible_endpoint
+        if normalized_product_type == "locked":
+            return locked_endpoint
+        raise ValueError("Simple Earn product_type must be 'flexible' or 'locked'")

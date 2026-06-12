@@ -119,3 +119,64 @@ def test_get_my_trades_is_symbol_scoped_and_signed() -> None:
     assert query["recvWindow"] == ["5000"]
     assert query["timestamp"] == ["1499827319559"]
     assert "signature" in query
+
+
+def test_deposit_history_request_is_signed() -> None:
+    captured_request: httpx.Request | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(200, json=[])
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        api_key="api-key",
+        api_secret="secret",
+        transport=httpx.MockTransport(handler),
+        time_ms=lambda: 1_499_827_319_559,
+    )
+
+    client.get_deposit_history(coin="USDT", start_time_ms=1, end_time_ms=2, offset=0, limit=1000)
+
+    assert captured_request is not None
+    assert captured_request.url.path == "/sapi/v1/capital/deposit/hisrec"
+    query = parse_qs(captured_request.url.query.decode("utf-8"))
+    assert query["coin"] == ["USDT"]
+    assert query["startTime"] == ["1"]
+    assert query["endTime"] == ["2"]
+    assert "signature" in query
+
+
+def test_simple_earn_history_uses_product_type_endpoint() -> None:
+    captured_request: httpx.Request | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(200, json={"rows": []})
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        api_key="api-key",
+        api_secret="secret",
+        transport=httpx.MockTransport(handler),
+        time_ms=lambda: 1_499_827_319_559,
+    )
+
+    client.get_simple_earn_rewards_history(
+        product_type="locked",
+        asset="BNB",
+        start_time_ms=1,
+        current=2,
+        size=50,
+    )
+
+    assert captured_request is not None
+    assert captured_request.url.path == "/sapi/v1/simple-earn/locked/history/rewardsRecord"
+    query = parse_qs(captured_request.url.query.decode("utf-8"))
+    assert query["asset"] == ["BNB"]
+    assert query["startTime"] == ["1"]
+    assert query["current"] == ["2"]
+    assert query["size"] == ["50"]
+    assert "signature" in query

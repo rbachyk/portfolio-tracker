@@ -19,8 +19,10 @@ Implemented so far:
 - Exchange info and price sync functions with mocked tests
 - Spot trade sync for configured symbols
 - Raw Binance event storage and normalized trade storage with idempotency
+- Deposit and withdrawal history sync
+- Simple Earn positions, subscriptions, redemptions, and rewards sync
 
-Earn sync, accounting logic, authentication, and the frontend dashboard are intentionally not implemented yet.
+Accounting logic, authentication, and the frontend dashboard are intentionally not implemented yet.
 
 ## Requirements
 
@@ -75,7 +77,7 @@ make docker-down
 make test
 ```
 
-The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, and trade sync idempotency with mocked Binance responses. They do not call Binance.
+The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, and Simple Earn sync with mocked Binance responses. They do not call Binance.
 
 ## Migrations
 
@@ -104,6 +106,9 @@ Before the first Spot trade sync, set `BINANCE_TRADE_SYNC_START_MS` to a Unix
 timestamp in milliseconds earlier than the first trade you want tracked. The sync
 refuses an initial backfill without this value so it cannot silently ingest only
 Binance's most recent trade page.
+
+Deposit, withdrawal, and Simple Earn history sync functions also require an
+explicit `start_time_ms` argument when called so local backfills are intentional.
 
 ## Security Notes
 

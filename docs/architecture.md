@@ -38,6 +38,22 @@ Idempotency is enforced with deterministic raw event ids and a unique normalized
 trade key on `symbol` plus Binance trade id. Re-running trade sync does not duplicate
 existing trades.
 
+## Phase 4
+
+Wallet and Simple Earn ingestion store raw Binance payloads first, then upsert
+normalized records for:
+
+- `deposits`
+- `withdrawals`
+- `earn_positions`
+- `earn_subscriptions`
+- `earn_redemptions`
+- `earn_rewards`
+
+Earn subscriptions and redemptions are stored as movement records, not profit/loss
+events. Earn rewards are stored separately with `cost_basis_mode = ZERO`, preserving
+the current accounting assumption for Phase 5.
+
 ## Planned Later Phases
 
 - Ledger event normalization
