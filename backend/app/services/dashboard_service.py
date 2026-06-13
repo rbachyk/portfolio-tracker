@@ -15,8 +15,10 @@ from app.db.models import (
     EarnRedemption,
     EarnReward,
     EarnSubscription,
+    FundingTransfer,
     LedgerEvent,
     Lot,
+    P2POrder,
     PortfolioSnapshot,
     PriceSnapshot,
     SpotBalance,
@@ -258,10 +260,29 @@ def get_cash_flows(db: Session) -> dict:
     for deposit in deposits:
         event_time = deposit.completed_at or deposit.inserted_at or deposit.created_at
         deposits_over_time[event_time.date()] += deposit.amount
+    for order in db.scalars(select(P2POrder).where(P2POrder.order_status == "COMPLETED")):
+        if order.order_created_at is None:
+            continue
+        signed_amount = order.amount if order.trade_type == "BUY" else -order.amount
+        deposits_over_time[order.order_created_at.date()] += signed_amount
 
     return {
         "deposits": [_deposit_to_dict(deposit) for deposit in deposits],
         "withdrawals": [_withdrawal_to_dict(withdrawal) for withdrawal in withdrawals],
+        "p2p_orders": [
+            _p2p_order_to_dict(order)
+            for order in db.scalars(
+                select(P2POrder).order_by(desc(P2POrder.order_created_at), desc(P2POrder.id))
+            )
+        ],
+        "funding_transfers": [
+            _funding_transfer_to_dict(transfer)
+            for transfer in db.scalars(
+                select(FundingTransfer).order_by(
+                    desc(FundingTransfer.transferred_at), desc(FundingTransfer.id)
+                )
+            )
+        ],
         "deposits_over_time": [
             {"date": day.isoformat(), "amount": decimal_to_string(amount)}
             for day, amount in sorted(deposits_over_time.items())
@@ -295,6 +316,9 @@ def list_sync_states(db: Session) -> list[dict]:
             if state.last_completed_at is None
             else state.last_completed_at.isoformat(),
             "error_message": state.error_message,
+            "progress_current": state.progress_current,
+            "progress_total": state.progress_total,
+            "progress_message": state.progress_message,
             "updated_at": state.updated_at.isoformat(),
         }
         for state in db.scalars(select(SyncState).order_by(SyncState.job_name))
@@ -470,6 +494,37 @@ def _withdrawal_to_dict(withdrawal: Withdrawal) -> dict:
         "completed_at": None
         if withdrawal.completed_at is None
         else withdrawal.completed_at.isoformat(),
+    }
+
+
+def _p2p_order_to_dict(order: P2POrder) -> dict:
+    return {
+        "order_number": order.order_number,
+        "trade_type": order.trade_type,
+        "asset_code": order.asset_code,
+        "fiat_code": order.fiat_code,
+        "amount": decimal_to_string(order.amount),
+        "total_price": decimal_to_string(order.total_price),
+        "unit_price": None if order.unit_price is None else decimal_to_string(order.unit_price),
+        "commission": decimal_to_string(order.commission),
+        "order_status": order.order_status,
+        "pay_method_name": order.pay_method_name,
+        "order_created_at": None
+        if order.order_created_at is None
+        else order.order_created_at.isoformat(),
+    }
+
+
+def _funding_transfer_to_dict(transfer: FundingTransfer) -> dict:
+    return {
+        "tran_id": str(transfer.tran_id),
+        "transfer_type": transfer.transfer_type,
+        "asset_code": transfer.asset_code,
+        "amount": decimal_to_string(transfer.amount),
+        "status": transfer.status,
+        "transferred_at": None
+        if transfer.transferred_at is None
+        else transfer.transferred_at.isoformat(),
     }
 
 

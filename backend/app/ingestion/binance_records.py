@@ -82,6 +82,9 @@ def mark_sync_started(db: Session, job_name: str) -> SyncState:
     sync_state.status = "running"
     sync_state.last_started_at = now
     sync_state.error_message = None
+    sync_state.progress_current = 0
+    sync_state.progress_total = None
+    sync_state.progress_message = None
     return sync_state
 
 
@@ -89,6 +92,8 @@ def mark_sync_completed(sync_state: SyncState) -> None:
     sync_state.status = "success"
     sync_state.last_completed_at = utc_now()
     sync_state.error_message = None
+    if sync_state.progress_total is not None:
+        sync_state.progress_current = sync_state.progress_total
 
 
 def mark_sync_failed(db: Session, job_name: str, error_message: str) -> None:
@@ -98,3 +103,20 @@ def mark_sync_failed(db: Session, job_name: str, error_message: str) -> None:
         db.add(sync_state)
     sync_state.status = "failed"
     sync_state.error_message = error_message[:2000]
+
+
+def mark_sync_progress(
+    db: Session,
+    job_name: str,
+    *,
+    current: int,
+    total: int | None,
+    message: str | None = None,
+) -> None:
+    sync_state = db.scalar(select(SyncState).where(SyncState.job_name == job_name))
+    if sync_state is None:
+        sync_state = SyncState(job_name=job_name)
+        db.add(sync_state)
+    sync_state.progress_current = current
+    sync_state.progress_total = total
+    sync_state.progress_message = None if message is None else message[:255]

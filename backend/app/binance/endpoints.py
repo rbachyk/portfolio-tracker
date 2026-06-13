@@ -1,4 +1,5 @@
 ACCOUNT_INFO = "/api/v3/account"
+C2C_ORDER_HISTORY = "/sapi/v1/c2c/orderMatch/listUserOrderHistory"
 DEPOSIT_HISTORY = "/sapi/v1/capital/deposit/hisrec"
 EARN_FLEXIBLE_POSITIONS = "/sapi/v1/simple-earn/flexible/position"
 EARN_FLEXIBLE_REDEMPTIONS = "/sapi/v1/simple-earn/flexible/history/redemptionRecord"
@@ -11,4 +12,5 @@ EARN_LOCKED_SUBSCRIPTIONS = "/sapi/v1/simple-earn/locked/history/subscriptionRec
 EXCHANGE_INFO = "/api/v3/exchangeInfo"
 MY_TRADES = "/api/v3/myTrades"
 TICKER_PRICE = "/api/v3/ticker/price"
+UNIVERSAL_TRANSFER_HISTORY = "/sapi/v1/asset/transfer"
 WITHDRAW_HISTORY = "/sapi/v1/capital/withdraw/history"

@@ -11,7 +11,12 @@ from app.accounting.ledger_builder import build_ledger_events, rebuild_lots
 from app.binance.client import BinanceClient
 from app.config import Settings
 from app.db.models import EarnPosition, Lot, SpotBalance, TargetAllocation, utc_now
-from app.ingestion.binance_records import mark_sync_completed, mark_sync_failed, mark_sync_started
+from app.ingestion.binance_records import (
+    mark_sync_completed,
+    mark_sync_failed,
+    mark_sync_progress,
+    mark_sync_started,
+)
 from app.ingestion.sync_account import sync_account_info
 from app.ingestion.sync_deposits import sync_deposits, sync_withdrawals
 from app.ingestion.sync_earn import (
@@ -20,12 +25,14 @@ from app.ingestion.sync_earn import (
     sync_earn_rewards,
     sync_earn_subscriptions,
 )
+from app.ingestion.sync_funding import sync_funding_transfers, sync_p2p_orders
 from app.ingestion.sync_prices import sync_exchange_info, sync_prices, sync_prices_for_assets
 from app.ingestion.sync_trades import initial_trade_sync_requires_start_time, sync_spot_trades
 from app.services.asset_utils import is_binance_earn_wrapper_asset
 from app.services.portfolio_service import create_portfolio_snapshot
 
 HISTORY_WINDOW = timedelta(days=29)
+RECENT_BINANCE_HISTORY = timedelta(days=179)
 
 
 class SyncJobError(ValueError):
@@ -84,6 +91,32 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
                 start_time_ms=start_ms,
                 end_time_ms=end_ms,
             ),
+        )
+    if job_name == "sync_p2p_orders":
+        return _history_job(
+            db,
+            settings,
+            job_name=job_name,
+            run=lambda client, start_ms, end_ms: sync_p2p_orders(
+                db,
+                client,
+                start_time_ms=start_ms,
+                end_time_ms=end_ms,
+            ),
+            max_lookback=RECENT_BINANCE_HISTORY,
+        )
+    if job_name == "sync_funding_transfers":
+        return _history_job(
+            db,
+            settings,
+            job_name=job_name,
+            run=lambda client, start_ms, end_ms: sync_funding_transfers(
+                db,
+                client,
+                start_time_ms=start_ms,
+                end_time_ms=end_ms,
+            ),
+            max_lookback=RECENT_BINANCE_HISTORY,
         )
     if job_name == "sync_earn_positions":
         return _with_client(settings, lambda client: sync_earn_positions(db, client), job_name)
@@ -164,6 +197,8 @@ def run_records_sync(db: Session, settings: Settings) -> dict[str, Any]:
         "sync_spot_trades",
         "sync_deposits",
         "sync_withdrawals",
+        "sync_p2p_orders",
+        "sync_funding_transfers",
         "sync_earn_positions",
         "sync_earn_subscriptions",
         "sync_earn_redemptions",
@@ -228,6 +263,7 @@ def _history_job(
     *,
     job_name: str,
     run: Callable[[BinanceClient, int, int], int],
+    max_lookback: timedelta | None = None,
 ) -> dict[str, Any]:
     if settings.binance_history_sync_start_ms is None:
         return _skipped_job(
@@ -239,22 +275,55 @@ def _history_job(
     if start_time_ms is None:
         raise ValueError("BINANCE_HISTORY_SYNC_START_MS is required")
 
+    progress_message = None
+    if max_lookback is not None:
+        min_start = datetime.now(UTC) - max_lookback
+        min_start_ms = int(min_start.timestamp() * 1000)
+        if start_time_ms < min_start_ms:
+            start_time_ms = min_start_ms
+            progress_message = "Binance API supports this history for roughly the last 6 months"
+
+    windows = _history_windows(start_time_ms)
+    mark_sync_progress(
+        db,
+        job_name,
+        current=0,
+        total=len(windows),
+        message=progress_message,
+    )
+    db.commit()
+
     with BinanceClient.from_settings(settings) as client:
         count = 0
-        for window_start_ms, window_end_ms in _history_windows(start_time_ms):
+        for index, (window_start_ms, window_end_ms) in enumerate(windows, start=1):
             count += run(client, window_start_ms, window_end_ms)
+            mark_sync_progress(
+                db,
+                job_name,
+                current=index,
+                total=len(windows),
+                message=progress_message,
+            )
+            db.commit()
     return {"job_name": job_name, "count": count}
 
 
 def _trade_history_job(db: Session, settings: Settings) -> dict[str, Any]:
+    start_time_ms = settings.binance_trade_sync_start_ms
+    if start_time_ms is None:
+        start_time_ms = settings.binance_history_sync_start_ms
+
     if (
-        settings.binance_trade_sync_start_ms is None
+        start_time_ms is None
         and initial_trade_sync_requires_start_time(db, symbols=settings.configured_symbols)
     ):
         return _skipped_job(
             db,
             "sync_spot_trades",
-            reason="BINANCE_TRADE_SYNC_START_MS is required before initial trade sync",
+            reason=(
+                "BINANCE_TRADE_SYNC_START_MS or BINANCE_HISTORY_SYNC_START_MS is "
+                "required before initial trade sync"
+            ),
         )
 
     return _with_client(
@@ -262,7 +331,8 @@ def _trade_history_job(db: Session, settings: Settings) -> dict[str, Any]:
         lambda client: sync_spot_trades(
             db,
             client,
-            start_time_ms=settings.binance_trade_sync_start_ms,
+            symbols=settings.configured_symbols,
+            start_time_ms=start_time_ms,
         ),
         "sync_spot_trades",
     )
@@ -273,6 +343,9 @@ def _skipped_job(db: Session, job_name: str, *, reason: str) -> dict[str, Any]:
     sync_state.status = "skipped"
     sync_state.last_completed_at = utc_now()
     sync_state.error_message = reason
+    sync_state.progress_current = 0
+    sync_state.progress_total = 0
+    sync_state.progress_message = reason[:255]
     db.commit()
     return {"job_name": job_name, "skipped": True, "reason": reason}
 
@@ -282,6 +355,7 @@ def _failed_job(db: Session, job_name: str, *, error: str) -> dict[str, Any]:
     sync_state.status = "failed"
     sync_state.last_completed_at = utc_now()
     sync_state.error_message = error[:2000]
+    sync_state.progress_message = error[:255]
     db.commit()
     return {"job_name": job_name, "failed": True, "error": error}
 
@@ -341,6 +415,10 @@ def _tracked_asset_codes(db: Session, *, base_asset: str) -> list[str]:
 
 def _tracked_db_job(db: Session, job_name: str, run: Callable[[], int]) -> dict[str, Any]:
     sync_state = mark_sync_started(db, job_name)
+    sync_state.progress_current = 0
+    sync_state.progress_total = 1
+    sync_state.progress_message = None
+    db.commit()
     try:
         count = run()
         mark_sync_completed(sync_state)

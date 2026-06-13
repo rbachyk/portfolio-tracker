@@ -180,15 +180,19 @@ Create a migration after adding models:
 make makemigration m="describe change"
 ```
 
-## Trade Sync Backfill
+## History Sync Backfill
 
 Before the first Spot trade sync, set `BINANCE_TRADE_SYNC_START_MS` to a Unix
-timestamp in milliseconds earlier than the first trade you want tracked. The sync
-refuses an initial backfill without this value so it cannot silently ingest only
-Binance's most recent trade page.
+timestamp in milliseconds earlier than the first trade you want tracked. If that
+value is not set, Spot trade sync falls back to `BINANCE_HISTORY_SYNC_START_MS`.
+The sync refuses an initial backfill only when both values are missing, so it
+cannot silently ingest only Binance's most recent trade page.
 
-Deposit, withdrawal, and Simple Earn history sync functions require
-`BINANCE_HISTORY_SYNC_START_MS` for scheduled or API-triggered backfills.
+Deposit, withdrawal, Simple Earn, P2P order, and Funding transfer history sync
+functions require `BINANCE_HISTORY_SYNC_START_MS` for scheduled or API-triggered
+backfills. P2P order and Funding transfer history are synced in bounded windows
+because Binance limits those APIs to recent history. For older P2P capital that
+Binance no longer returns, add a manual adjustment or import it separately.
 
 ## Sync Worker
 

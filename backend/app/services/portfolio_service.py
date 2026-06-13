@@ -13,6 +13,7 @@ from app.db.models import (
     Deposit,
     EarnPosition,
     Lot,
+    P2POrder,
     PortfolioSnapshot,
     PriceSnapshot,
     SpotBalance,
@@ -280,6 +281,15 @@ def _base_asset_cash_flows(db: Session, base_asset: str) -> tuple[Decimal, Decim
         ),
         ZERO,
     )
+    for order in db.scalars(
+        select(P2POrder)
+        .where(P2POrder.asset_code == base_asset)
+        .where(P2POrder.order_status == "COMPLETED")
+    ):
+        if order.trade_type == "BUY":
+            deposits += order.amount
+        elif order.trade_type == "SELL":
+            withdrawals += order.amount
     return deposits, withdrawals
 
 

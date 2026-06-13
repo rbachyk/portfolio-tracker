@@ -134,6 +134,46 @@ class BinanceClient:
             },
         )
 
+    def get_c2c_order_history(
+        self,
+        *,
+        trade_type: str | None = None,
+        start_timestamp_ms: int | None = None,
+        end_timestamp_ms: int | None = None,
+        page: int = 1,
+        rows: int = 100,
+    ) -> dict[str, Any]:
+        return self._get_signed(
+            endpoints.C2C_ORDER_HISTORY,
+            params={
+                "tradeType": trade_type,
+                "startTimestamp": start_timestamp_ms,
+                "endTimestamp": end_timestamp_ms,
+                "page": page,
+                "rows": rows,
+            },
+        )
+
+    def get_universal_transfer_history(
+        self,
+        *,
+        transfer_type: str,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        current: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        return self._get_signed(
+            endpoints.UNIVERSAL_TRANSFER_HISTORY,
+            params={
+                "type": transfer_type,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+                "current": current,
+                "size": size,
+            },
+        )
+
     def get_simple_earn_flexible_positions(
         self,
         *,

@@ -30,9 +30,11 @@ constraint. The sync reads enabled/configured symbols, fetches trades per symbol
 stores each raw Binance payload in `raw_binance_events`, and stores normalized rows
 in `trades`.
 
-Initial backfills require `BINANCE_TRADE_SYNC_START_MS` so the system does not
-silently ingest only Binance's most recent trade page. Once a symbol has synced
-trades, later runs continue from the highest stored Binance trade id.
+Initial backfills use `BINANCE_TRADE_SYNC_START_MS`, falling back to
+`BINANCE_HISTORY_SYNC_START_MS` when the trade-specific value is not set. The
+system refuses an initial trade backfill only when both values are missing, so it
+does not silently ingest only Binance's most recent trade page. Once a symbol has
+synced trades, later runs continue from the highest stored Binance trade id.
 
 Idempotency is enforced with deterministic raw event ids and a unique normalized
 trade key on `symbol` plus Binance trade id. Re-running trade sync does not duplicate
@@ -45,10 +47,16 @@ normalized records for:
 
 - `deposits`
 - `withdrawals`
+- `p2p_orders`
+- `funding_transfers`
 - `earn_positions`
 - `earn_subscriptions`
 - `earn_redemptions`
 - `earn_rewards`
+
+Completed P2P buys and sells are treated as external capital flows. Funding to
+Spot transfers are stored for audit and dashboard visibility, but are not counted
+as new capital because they are internal wallet movement.
 
 Earn subscriptions and redemptions are stored as movement records, not profit/loss
 events. Earn rewards are stored separately with `cost_basis_mode = ZERO`, preserving

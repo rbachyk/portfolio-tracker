@@ -46,20 +46,59 @@ def add_enabled_symbol(db: Session, symbol: str = "BTCUSDT") -> None:
 def test_sync_spot_trades_skips_initial_sync_without_start_time() -> None:
     db = make_session()
     add_enabled_symbol(db)
-    settings = Settings(binance_symbols="BTCUSDT", binance_trade_sync_start_ms=None)
+    settings = Settings(
+        binance_symbols="BTCUSDT",
+        binance_trade_sync_start_ms=None,
+        binance_history_sync_start_ms=None,
+    )
     settings.binance_trade_sync_start_ms = None
+    settings.binance_history_sync_start_ms = None
 
     result = run_sync_job(db, settings, job_name="sync_spot_trades")
 
     assert result == {
         "job_name": "sync_spot_trades",
         "skipped": True,
-        "reason": "BINANCE_TRADE_SYNC_START_MS is required before initial trade sync",
+        "reason": (
+            "BINANCE_TRADE_SYNC_START_MS or BINANCE_HISTORY_SYNC_START_MS is required "
+            "before initial trade sync"
+        ),
     }
     sync_state = db.scalar(select(SyncState).where(SyncState.job_name == "sync_spot_trades"))
     assert sync_state is not None
     assert sync_state.status == "skipped"
     assert sync_state.error_message == result["reason"]
+
+
+def test_sync_spot_trades_uses_history_start_time_for_initial_backfill(monkeypatch) -> None:
+    db = make_session()
+    add_enabled_symbol(db)
+    settings = Settings(
+        binance_symbols="BTCUSDT",
+        binance_trade_sync_start_ms=None,
+        binance_history_sync_start_ms=1_609_459_200_000,
+    )
+    captured: dict[str, int | None] = {}
+
+    class FakeClient:
+        def get_my_trades(self, **params):
+            captured["start_time_ms"] = params["start_time_ms"]
+            return []
+
+    def fake_with_client(settings, run, job_name):  # noqa: ARG001
+        return {"job_name": job_name, "count": run(FakeClient())}
+
+    monkeypatch.setattr(sync_service, "_with_client", fake_with_client)
+
+    result = run_sync_job(db, settings, job_name="sync_spot_trades")
+
+    assert result == {"job_name": "sync_spot_trades", "count": 0}
+    assert captured["start_time_ms"] == 1_609_459_200_000
+    sync_state = db.scalar(select(SyncState).where(SyncState.job_name == "sync_spot_trades"))
+    assert sync_state is not None
+    assert sync_state.status == "success"
+    assert sync_state.progress_current == 1
+    assert sync_state.progress_total == 1
 
 
 def test_records_sync_continues_when_trade_backfill_start_time_is_missing(monkeypatch) -> None:
@@ -87,6 +126,15 @@ def test_records_sync_continues_when_trade_backfill_start_time_is_missing(monkey
         "skipped": True,
         "reason": "BINANCE_HISTORY_SYNC_START_MS is not configured",
     }
+    assert result["results"]["sync_p2p_orders"] == {
+        "job_name": "sync_p2p_orders",
+        "skipped": True,
+        "reason": "BINANCE_HISTORY_SYNC_START_MS is not configured",
+    }
+    p2p_state = db.scalar(select(SyncState).where(SyncState.job_name == "sync_p2p_orders"))
+    assert p2p_state is not None
+    assert p2p_state.progress_current == 0
+    assert p2p_state.progress_total == 0
     assert result["results"]["sync_earn_positions"] == {
         "job_name": "sync_earn_positions",
         "count": 1,

@@ -15,12 +15,23 @@ from app.db.models import (
     LedgerEvent,
     Lot,
     ManualAdjustment,
+    P2POrder,
     Trade,
     Withdrawal,
     utc_now,
 )
 
 ZERO = Decimal("0")
+MANAGED_LEDGER_SOURCE_TABLES = (
+    "trades",
+    "deposits",
+    "withdrawals",
+    "p2p_orders",
+    "earn_subscriptions",
+    "earn_redemptions",
+    "earn_rewards",
+    "manual_adjustments",
+)
 
 
 def build_ledger_events(db: Session) -> int:
@@ -28,23 +39,37 @@ def build_ledger_events(db: Session) -> int:
     upserted = 0
     for event in events:
         upserted += upsert_ledger_event(db, event)
+    current_external_ids = {event.external_id for event in events}
+    stale_query = delete(LedgerEvent).where(
+        LedgerEvent.source_table.in_(MANAGED_LEDGER_SOURCE_TABLES)
+    )
+    if current_external_ids:
+        stale_query = stale_query.where(~LedgerEvent.external_id.in_(current_external_ids))
+    db.execute(stale_query)
     db.commit()
     return upserted
 
 
 def rebuild_lots(db: Session) -> int:
     events = [
-        ledger_event_to_accounting_event(event)
+        event
         for event in db.scalars(
             select(LedgerEvent).order_by(LedgerEvent.event_time, LedgerEvent.id)
         )
+        if _is_rebuildable_ledger_event(event)
     ]
-    result = rebuild_lots_from_events(events)
+    result = rebuild_lots_from_events(
+        [ledger_event_to_accounting_event(event) for event in events]
+    )
     db.execute(delete(Lot))
     for lot in result.lots:
         db.add(_lot_state_to_model(db, lot))
     db.commit()
     return len(result.lots)
+
+
+def _is_rebuildable_ledger_event(event: LedgerEvent) -> bool:
+    return not (event.event_type == "EARN_REWARD" and event.quantity <= ZERO)
 
 
 def build_accounting_events_from_db(db: Session) -> list[AccountingEvent]:
@@ -57,6 +82,9 @@ def build_accounting_events_from_db(db: Session) -> list[AccountingEvent]:
         select(Withdrawal).order_by(Withdrawal.completed_at, Withdrawal.id)
     ):
         events.append(withdrawal_to_ledger_event(withdrawal))
+    for order in db.scalars(select(P2POrder).order_by(P2POrder.order_created_at, P2POrder.id)):
+        if order.order_status == "COMPLETED":
+            events.append(p2p_order_to_ledger_event(order))
     for subscription in db.scalars(
         select(EarnSubscription).order_by(EarnSubscription.subscribed_at, EarnSubscription.id)
     ):
@@ -66,7 +94,8 @@ def build_accounting_events_from_db(db: Session) -> list[AccountingEvent]:
     ):
         events.append(earn_redemption_to_ledger_event(redemption))
     for reward in db.scalars(select(EarnReward).order_by(EarnReward.rewarded_at, EarnReward.id)):
-        events.append(earn_reward_to_ledger_event(reward))
+        if reward.amount > ZERO:
+            events.append(earn_reward_to_ledger_event(reward))
     for adjustment in db.scalars(
         select(ManualAdjustment).order_by(ManualAdjustment.adjusted_at, ManualAdjustment.id)
     ):
@@ -174,6 +203,28 @@ def withdrawal_to_ledger_event(withdrawal: Withdrawal) -> AccountingEvent:
         fee_asset_code=withdrawal.asset_code,
         fee_amount=withdrawal.transaction_fee,
         event_time=withdrawal.completed_at or withdrawal.applied_at or withdrawal.created_at,
+    )
+
+
+def p2p_order_to_ledger_event(order: P2POrder) -> AccountingEvent:
+    is_buy = order.trade_type == "BUY"
+    return AccountingEvent(
+        event_type="DEPOSIT" if is_buy else "WITHDRAWAL",
+        external_id=f"p2p_order:{order.id}",
+        source_table="p2p_orders",
+        source_id=order.id,
+        asset_code=order.asset_code,
+        quantity=order.amount if is_buy else -order.amount,
+        quote_quantity=ZERO,
+        fee_asset_code=order.asset_code if order.commission > ZERO else None,
+        fee_amount=order.commission,
+        event_time=order.order_created_at or order.created_at,
+        metadata={
+            "order_number": order.order_number,
+            "trade_type": order.trade_type,
+            "fiat_code": order.fiat_code,
+            "total_price": str(order.total_price),
+        },
     )
 
 

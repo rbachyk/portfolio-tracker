@@ -91,6 +91,9 @@ class SyncState(Base):
     last_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
+    progress_current: Mapped[int | None] = mapped_column(Integer)
+    progress_total: Mapped[int | None] = mapped_column(Integer)
+    progress_message: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
@@ -278,6 +281,51 @@ class Withdrawal(Base):
     wallet_type: Mapped[int | None] = mapped_column(Integer)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class P2POrder(Base):
+    __tablename__ = "p2p_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    order_number: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    trade_type: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    fiat_code: Mapped[str | None] = mapped_column(String(16), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total_price: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    commission: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    order_status: Mapped[str | None] = mapped_column(String(64), index=True)
+    pay_method_name: Mapped[str | None] = mapped_column(String(128))
+    order_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped[RawBinanceEvent] = relationship("RawBinanceEvent")
+
+
+class FundingTransfer(Base):
+    __tablename__ = "funding_transfers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int] = mapped_column(ForeignKey("raw_binance_events.id"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    tran_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    transfer_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    status: Mapped[str | None] = mapped_column(String(64), index=True)
+    transferred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now

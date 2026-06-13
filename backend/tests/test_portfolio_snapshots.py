@@ -15,6 +15,7 @@ from app.db.models import (
     EarnPosition,
     LedgerEvent,
     Lot,
+    P2POrder,
     PortfolioSnapshot,
     PriceSnapshot,
     RawBinanceEvent,
@@ -317,6 +318,47 @@ def test_create_portfolio_snapshot_values_current_spot_and_earn_balances() -> No
     assert [holding["asset_code"] for holding in snapshot.holdings] == ["BTC", "ETH"]
     assert snapshot.holdings[0]["market_value"] == "300"
     assert snapshot.holdings[1]["market_value"] == "20"
+
+
+def test_create_portfolio_snapshot_counts_completed_p2p_orders_as_capital_flows() -> None:
+    db = make_session()
+    buy_raw = add_raw_event(db, "p2p-buy:1")
+    sell_raw = add_raw_event(db, "p2p-sell:1")
+    db.add_all(
+        [
+            P2POrder(
+                raw_event_id=buy_raw.id,
+                external_id="p2p-buy:1",
+                order_number="buy-1",
+                trade_type="BUY",
+                asset_code="USDT",
+                amount=Decimal("100"),
+                total_price=Decimal("100"),
+                commission=ZERO,
+                order_status="COMPLETED",
+                order_created_at=START,
+            ),
+            P2POrder(
+                raw_event_id=sell_raw.id,
+                external_id="p2p-sell:1",
+                order_number="sell-1",
+                trade_type="SELL",
+                asset_code="USDT",
+                amount=Decimal("25"),
+                total_price=Decimal("25"),
+                commission=ZERO,
+                order_status="COMPLETED",
+                order_created_at=START + timedelta(minutes=1),
+            ),
+        ]
+    )
+    db.commit()
+
+    snapshot = create_portfolio_snapshot(db, base_asset="USDT", snapshot_at=START)
+
+    assert snapshot.total_deposited == Decimal("100")
+    assert snapshot.total_withdrawn == Decimal("25")
+    assert snapshot.net_deposited == Decimal("75")
 
 
 def test_holdings_hide_ld_wrapper_balances_and_value_earn_positions() -> None:

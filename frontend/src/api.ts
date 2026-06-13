@@ -179,6 +179,8 @@ export type EarnMovement = {
 export type CashFlows = {
   deposits: Deposit[];
   withdrawals: Withdrawal[];
+  p2p_orders: P2POrder[];
+  funding_transfers: FundingTransfer[];
   deposits_over_time: ChartPoint[];
 };
 
@@ -195,6 +197,29 @@ export type Deposit = {
 export type Withdrawal = Deposit & {
   transaction_fee: string;
   applied_at: string | null;
+};
+
+export type P2POrder = {
+  order_number: string;
+  trade_type: string;
+  asset_code: string;
+  fiat_code: string | null;
+  amount: string;
+  total_price: string;
+  unit_price: string | null;
+  commission: string;
+  order_status: string | null;
+  pay_method_name: string | null;
+  order_created_at: string | null;
+};
+
+export type FundingTransfer = {
+  tran_id: string;
+  transfer_type: string;
+  asset_code: string;
+  amount: string;
+  status: string | null;
+  transferred_at: string | null;
 };
 
 export type ChartPoint = {
@@ -215,6 +240,9 @@ export type SyncJob = {
   last_started_at: string | null;
   last_completed_at: string | null;
   error_message: string | null;
+  progress_current: number | null;
+  progress_total: number | null;
+  progress_message: string | null;
   updated_at: string;
 };
 

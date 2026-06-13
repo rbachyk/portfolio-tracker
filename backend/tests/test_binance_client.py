@@ -161,6 +161,76 @@ def test_deposit_history_request_is_signed() -> None:
     assert "signature" in query
 
 
+def test_c2c_order_history_request_is_signed() -> None:
+    captured_request: httpx.Request | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(200, json={"data": []})
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        api_key="api-key",
+        api_secret="secret",
+        transport=httpx.MockTransport(handler),
+        time_ms=lambda: 1_499_827_319_559,
+    )
+
+    client.get_c2c_order_history(
+        trade_type="BUY",
+        start_timestamp_ms=1,
+        end_timestamp_ms=2,
+        page=3,
+        rows=100,
+    )
+
+    assert captured_request is not None
+    assert captured_request.url.path == "/sapi/v1/c2c/orderMatch/listUserOrderHistory"
+    query = parse_qs(captured_request.url.query.decode("utf-8"))
+    assert query["tradeType"] == ["BUY"]
+    assert query["startTimestamp"] == ["1"]
+    assert query["endTimestamp"] == ["2"]
+    assert query["page"] == ["3"]
+    assert query["rows"] == ["100"]
+    assert "signature" in query
+
+
+def test_universal_transfer_history_request_is_signed() -> None:
+    captured_request: httpx.Request | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(200, json={"rows": []})
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        api_key="api-key",
+        api_secret="secret",
+        transport=httpx.MockTransport(handler),
+        time_ms=lambda: 1_499_827_319_559,
+    )
+
+    client.get_universal_transfer_history(
+        transfer_type="FUNDING_MAIN",
+        start_time_ms=1,
+        end_time_ms=2,
+        current=4,
+        size=100,
+    )
+
+    assert captured_request is not None
+    assert captured_request.url.path == "/sapi/v1/asset/transfer"
+    query = parse_qs(captured_request.url.query.decode("utf-8"))
+    assert query["type"] == ["FUNDING_MAIN"]
+    assert query["startTime"] == ["1"]
+    assert query["endTime"] == ["2"]
+    assert query["current"] == ["4"]
+    assert query["size"] == ["100"]
+    assert "signature" in query
+
+
 def test_simple_earn_history_uses_product_type_endpoint() -> None:
     captured_request: httpx.Request | None = None
 

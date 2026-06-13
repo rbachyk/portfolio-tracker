@@ -9,7 +9,7 @@ from app.accounting.events import AccountingEvent
 from app.accounting.ledger_builder import build_ledger_events, rebuild_lots, trade_to_ledger_events
 from app.accounting.lots import rebuild_lots_from_events
 from app.accounting.pnl import calculate_lot_pnl, calculate_symbol_pnl
-from app.db.models import Asset, Base, LedgerEvent, Lot, RawBinanceEvent, Symbol, Trade
+from app.db.models import Asset, Base, EarnReward, LedgerEvent, Lot, RawBinanceEvent, Symbol, Trade
 
 EIGHTEEN_PLACES = Decimal("0.000000000000000001")
 START = datetime(2024, 1, 1, tzinfo=UTC)
@@ -209,6 +209,47 @@ def test_earn_reward_after_buy_is_zero_cost_lot() -> None:
     assert pnl.reward_quantity == Decimal("0.1")
     assert pnl.reward_value == Decimal("20.0")
     assert pnl.unrealized_pnl_including_rewards == Decimal("120.0")
+
+
+def test_zero_amount_earn_rewards_do_not_create_lots() -> None:
+    db = make_session()
+    raw_event = RawBinanceEvent(
+        source="binance_simple_earn",
+        event_type="EARN_REWARD",
+        external_id="earn_reward:zero",
+        payload={"asset": "BTC", "rewards": "0"},
+    )
+    db.add(raw_event)
+    db.flush()
+    db.add(
+        EarnReward(
+            raw_event_id=raw_event.id,
+            external_id="earn_reward:zero",
+            product_type="flexible",
+            asset_code="BTC",
+            amount=Decimal("0"),
+            cost_basis_mode="ZERO",
+            source_endpoint="simple-earn/flexible/rewardsRecord",
+        )
+    )
+    db.add(
+        LedgerEvent(
+            external_id="earn_reward:1",
+            event_type="EARN_REWARD",
+            source_table="earn_rewards",
+            source_id=1,
+            asset_code="BTC",
+            quantity=Decimal("0"),
+            quote_quantity=Decimal("0"),
+            fee_amount=Decimal("0"),
+            event_time=START,
+        )
+    )
+    db.commit()
+
+    assert build_ledger_events(db) == 0
+    assert db.scalar(select(LedgerEvent).where(LedgerEvent.external_id == "earn_reward:1")) is None
+    assert rebuild_lots(db) == 0
 
 
 def test_earn_subscription_and_redemption_do_not_create_lots_or_pnl() -> None:

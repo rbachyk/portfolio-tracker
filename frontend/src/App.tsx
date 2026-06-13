@@ -1,7 +1,10 @@
 import {
   Activity,
+  ArrowUpDown,
   BarChart3,
   BriefcaseBusiness,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Download,
   Gauge,
@@ -257,54 +260,64 @@ function HoldingsPage({ api, reloadKey }: PageProps) {
     <DataState resource={resource}>
       {(data) => (
         <Panel title="Holdings">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th>Total qty</th>
-                  <th>Spot qty</th>
-                  <th>Earn qty</th>
-                  <th>Avg buy</th>
-                  <th>Price</th>
-                  <th>Cost basis</th>
-                  <th>Market value</th>
-                  <th>Unrealized PnL</th>
-                  <th>Rewards</th>
-                  <th>Allocation</th>
-                  <th>Target</th>
-                  <th>Diff</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.holdings.map((item) => (
-                  <tr key={item.asset_code}>
-                    <td className="asset-cell">{item.asset_code}</td>
-                    <td>{quantity(item.total_quantity)}</td>
-                    <td>{quantity(item.spot_quantity)}</td>
-                    <td>{quantity(item.earn_quantity)}</td>
-                    <td>{money(item.average_buy_price)}</td>
-                    <td>{money(item.current_price)}</td>
-                    <td>{money(item.cost_basis)}</td>
-                    <td>{money(item.market_value)}</td>
-                    <td className={tone(item.unrealized_pnl_including_rewards)}>
-                      {money(item.unrealized_pnl_including_rewards)}
-                      <span className="muted"> {percent(item.unrealized_pnl_pct)}</span>
-                    </td>
-                    <td>
-                      {quantity(item.earn_rewards_quantity)}
-                      <span className="muted"> / {money(item.earn_rewards_value)}</span>
-                    </td>
-                    <td>{percent(item.allocation_pct)}</td>
-                    <td>{percent(item.target_pct)}</td>
-                    <td className={tone(item.target_difference_pct)}>
-                      {percent(item.target_difference_pct)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SortableTable
+            columns={[
+              "Asset",
+              "Total qty",
+              "Spot qty",
+              "Earn qty",
+              "Avg buy",
+              "Price",
+              "Cost basis",
+              "Market value",
+              "Unrealized PnL",
+              "Rewards",
+              "Allocation",
+              "Target",
+              "Diff"
+            ]}
+            rows={data.holdings.map((item) => ({
+              key: item.asset_code,
+              cells: [
+                <span className="asset-cell">{item.asset_code}</span>,
+                quantity(item.total_quantity),
+                quantity(item.spot_quantity),
+                quantity(item.earn_quantity),
+                money(item.average_buy_price),
+                money(item.current_price),
+                money(item.cost_basis),
+                money(item.market_value),
+                <span className={tone(item.unrealized_pnl_including_rewards)}>
+                  {money(item.unrealized_pnl_including_rewards)}
+                  <span className="muted"> {percent(item.unrealized_pnl_pct)}</span>
+                </span>,
+                <>
+                  {quantity(item.earn_rewards_quantity)}
+                  <span className="muted"> / {money(item.earn_rewards_value)}</span>
+                </>,
+                percent(item.allocation_pct),
+                percent(item.target_pct),
+                <span className={tone(item.target_difference_pct)}>
+                  {percent(item.target_difference_pct)}
+                </span>
+              ],
+              sortValues: [
+                item.asset_code,
+                item.total_quantity,
+                item.spot_quantity,
+                item.earn_quantity,
+                item.average_buy_price,
+                item.current_price,
+                item.cost_basis,
+                item.market_value,
+                item.unrealized_pnl_including_rewards,
+                item.earn_rewards_value,
+                item.allocation_pct,
+                item.target_pct,
+                item.target_difference_pct
+              ]
+            }))}
+          />
         </Panel>
       )}
     </DataState>
@@ -317,47 +330,56 @@ function LotsPage({ api, reloadKey }: PageProps) {
     <DataState resource={resource}>
       {(data) => (
         <Panel title="Buy Transactions And Open Lots">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th>Buy date</th>
-                  <th>Bought</th>
-                  <th>Remaining</th>
-                  <th>Buy price</th>
-                  <th>Current price</th>
-                  <th>Cost basis</th>
-                  <th>Current value</th>
-                  <th>Unrealized PnL</th>
-                  <th>Source trade</th>
-                  <th>Fee</th>
-                  <th>Mode</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.lots.map((item) => (
-                  <tr key={item.id}>
-                    <td className="asset-cell">{item.asset_code}</td>
-                    <td>{dateTime(item.buy_date)}</td>
-                    <td>{quantity(item.quantity_bought)}</td>
-                    <td>{quantity(item.remaining_quantity)}</td>
-                    <td>{money(item.buy_price)}</td>
-                    <td>{money(item.current_price)}</td>
-                    <td>{money(item.cost_basis)}</td>
-                    <td>{money(item.current_value)}</td>
-                    <td className={tone(item.unrealized_pnl)}>
-                      {money(item.unrealized_pnl)}
-                      <span className="muted"> {percent(item.unrealized_pnl_pct)}</span>
-                    </td>
-                    <td>{item.source_trade_id || item.source_type}</td>
-                    <td>{item.fee ? `${quantity(item.fee.amount)} ${item.fee.asset_code}` : "None"}</td>
-                    <td>{item.is_reward ? "Reward excluded toggle" : "Market movement"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SortableTable
+            columns={[
+              "Asset",
+              "Buy date",
+              "Bought",
+              "Remaining",
+              "Buy price",
+              "Current price",
+              "Cost basis",
+              "Current value",
+              "Unrealized PnL",
+              "Source trade",
+              "Fee",
+              "Mode"
+            ]}
+            rows={data.lots.map((item) => ({
+              key: String(item.id),
+              cells: [
+                <span className="asset-cell">{item.asset_code}</span>,
+                dateTime(item.buy_date),
+                quantity(item.quantity_bought),
+                quantity(item.remaining_quantity),
+                money(item.buy_price),
+                money(item.current_price),
+                money(item.cost_basis),
+                money(item.current_value),
+                <span className={tone(item.unrealized_pnl)}>
+                  {money(item.unrealized_pnl)}
+                  <span className="muted"> {percent(item.unrealized_pnl_pct)}</span>
+                </span>,
+                item.source_trade_id || item.source_type,
+                item.fee ? `${quantity(item.fee.amount)} ${item.fee.asset_code}` : "None",
+                item.is_reward ? "Earn reward" : "Market movement"
+              ],
+              sortValues: [
+                item.asset_code,
+                item.buy_date,
+                item.quantity_bought,
+                item.remaining_quantity,
+                item.buy_price,
+                item.current_price,
+                item.cost_basis,
+                item.current_value,
+                item.unrealized_pnl,
+                item.source_trade_id || item.source_type,
+                item.fee?.amount || "0",
+                item.is_reward ? "Earn reward" : "Market movement"
+              ]
+            }))}
+          />
         </Panel>
       )}
     </DataState>
@@ -400,6 +422,7 @@ function EarnPage({ api, reloadKey }: PageProps) {
           <Panel title="Recent Rewards">
             <SimpleTable
               columns={["Asset", "Product", "Type", "Amount", "Value", "Rewarded"]}
+              pageSize={25}
               rows={data.rewards.map((item) => [
                 item.asset_code,
                 item.product_type,
@@ -471,6 +494,34 @@ function DepositsPage({ api, reloadKey }: PageProps) {
                   quantity(item.transaction_fee),
                   item.network || "Unknown",
                   dateTime(item.completed_at)
+                ])}
+              />
+            </Panel>
+          </div>
+          <div className="dashboard-grid two">
+            <Panel title="P2P Orders">
+              <SimpleTable
+                columns={["Type", "Asset", "Amount", "Fiat", "Status", "Method", "Created"]}
+                rows={data.p2p_orders.map((item) => [
+                  item.trade_type,
+                  item.asset_code,
+                  quantity(item.amount),
+                  `${compact(item.total_price)} ${item.fiat_code || ""}`,
+                  item.order_status || "Unknown",
+                  item.pay_method_name || "",
+                  dateTime(item.order_created_at)
+                ])}
+              />
+            </Panel>
+            <Panel title="Funding Transfers">
+              <SimpleTable
+                columns={["Type", "Asset", "Amount", "Status", "Transferred"]}
+                rows={data.funding_transfers.map((item) => [
+                  item.transfer_type,
+                  item.asset_code,
+                  quantity(item.amount),
+                  item.status || "Unknown",
+                  dateTime(item.transferred_at)
                 ])}
               />
             </Panel>
@@ -821,13 +872,14 @@ function SyncPage({ api, reloadKey }: PageProps) {
         {(data) => (
           <Panel title="Sync Status">
             <SimpleTable
-              columns={["Job", "Status", "Started", "Completed", "Error"]}
+              columns={["Job", "Status", "Progress", "Started", "Completed", "Error"]}
               rows={data.jobs.map((item) => [
                 item.job_name,
                 item.status,
+                syncProgress(item),
                 dateTime(item.last_started_at),
                 dateTime(item.last_completed_at),
-                item.error_message || ""
+                item.error_message || item.progress_message || ""
               ])}
             />
           </Panel>
@@ -902,36 +954,150 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function SimpleTable({ columns, rows }: { columns: string[]; rows: string[][] }) {
+type SortValue = string | number | null | undefined;
+type TableRow = {
+  key: string;
+  cells: ReactNode[];
+  sortValues?: SortValue[];
+};
+
+function SimpleTable({
+  columns,
+  rows,
+  pageSize
+}: {
+  columns: string[];
+  rows: ReactNode[][];
+  pageSize?: number;
+}) {
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
+    <SortableTable
+      columns={columns}
+      pageSize={pageSize}
+      rows={rows.map((row, rowIndex) => ({
+        key: `${row.join("|")}-${rowIndex}`,
+        cells: row,
+        sortValues: row.map((cell) =>
+          typeof cell === "string" || typeof cell === "number" ? cell : ""
+        )
+      }))}
+    />
+  );
+}
+
+function SortableTable({
+  columns,
+  rows,
+  pageSize
+}: {
+  columns: string[];
+  rows: TableRow[];
+  pageSize?: number;
+}) {
+  const [sort, setSort] = useState<{ index: number; direction: "asc" | "desc" } | null>(null);
+  const [page, setPage] = useState(1);
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    return [...rows].sort((left, right) => {
+      const leftValue = normalizeSortValue(left.sortValues?.[sort.index]);
+      const rightValue = normalizeSortValue(right.sortValues?.[sort.index]);
+      const result =
+        typeof leftValue === "number" && typeof rightValue === "number"
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue), undefined, {
+              numeric: true,
+              sensitivity: "base"
+            });
+      return sort.direction === "asc" ? result : -result;
+    });
+  }, [rows, sort]);
+  const totalPages = pageSize ? Math.max(Math.ceil(sortedRows.length / pageSize), 1) : 1;
+  const safePage = Math.min(page, totalPages);
+  const visibleRows = pageSize
+    ? sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize)
+    : sortedRows;
+
+  useEffect(() => {
+    setPage(1);
+  }, [rows.length, pageSize, sort?.index, sort?.direction]);
+
+  function toggleSort(index: number) {
+    setSort((current) => {
+      if (!current || current.index !== index) return { index, direction: "asc" };
+      if (current.direction === "asc") return { index, direction: "desc" };
+      return null;
+    });
+  }
+
+  return (
+    <>
+      <div className="table-wrap">
+        <table>
+          <thead>
             <tr>
-              <td className="muted" colSpan={columns.length}>
-                No records
-              </td>
+              {columns.map((column, index) => (
+                <th key={column}>
+                  <button
+                    className="sort-button"
+                    onClick={() => toggleSort(index)}
+                    title={`Sort by ${column}`}
+                    type="button"
+                  >
+                    <span>{column}</span>
+                    <ArrowUpDown size={14} />
+                    {sort?.index === index ? (
+                      <span className="sort-indicator">{sort.direction === "asc" ? "Asc" : "Desc"}</span>
+                    ) : null}
+                  </button>
+                </th>
+              ))}
             </tr>
-          ) : (
-            rows.map((row, rowIndex) => (
-              <tr key={`${row.join("|")}-${rowIndex}`}>
-                {row.map((cell, cellIndex) => (
-                  <td key={`${cell}-${cellIndex}`}>{cell}</td>
-                ))}
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td className="muted" colSpan={columns.length}>
+                  No records
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            ) : (
+              visibleRows.map((row) => (
+                <tr key={row.key}>
+                  {row.cells.map((cell, cellIndex) => (
+                    <td key={`${row.key}-${cellIndex}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {pageSize && rows.length > pageSize ? (
+        <div className="pagination">
+          <button
+            className="icon-button"
+            disabled={safePage <= 1}
+            onClick={() => setPage((value) => Math.max(value - 1, 1))}
+            title="Previous page"
+            type="button"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span>
+            Page {safePage} of {totalPages}
+          </span>
+          <button
+            className="icon-button"
+            disabled={safePage >= totalPages}
+            onClick={() => setPage((value) => Math.min(value + 1, totalPages))}
+            title="Next page"
+            type="button"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -1062,6 +1228,39 @@ function shortId(value: string | null | undefined) {
   if (!value) return "";
   if (value.length <= 14) return value;
   return `${value.slice(0, 6)}...${value.slice(-6)}`;
+}
+
+function syncProgress(job: SyncJob) {
+  if (job.progress_total === null || job.progress_total === undefined) {
+    return job.status === "running" ? "Running" : job.status === "success" ? "Done" : "";
+  }
+  if (job.progress_total === 0) {
+    return job.progress_message || "0 / 0";
+  }
+  const current = job.progress_current || 0;
+  const pct = Math.min(Math.max(current / job.progress_total, 0), 1);
+  return (
+    <div className="progress-cell">
+      <div className="progress-track">
+        <div className="progress-fill" style={{ width: `${pct * 100}%` }} />
+      </div>
+      <span>
+        {current} / {job.progress_total}
+      </span>
+    </div>
+  );
+}
+
+function normalizeSortValue(value: SortValue): string | number {
+  if (value === null || value === undefined || value === "N/A" || value === "Never") return "";
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  const numeric = Number(trimmed.replaceAll(",", "").replace("%", ""));
+  if (Number.isFinite(numeric)) return numeric;
+  const timestamp = Date.parse(trimmed);
+  if (Number.isFinite(timestamp)) return timestamp;
+  return trimmed;
 }
 
 function tone(value: string | number | null | undefined) {

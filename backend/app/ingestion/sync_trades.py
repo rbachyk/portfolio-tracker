@@ -23,12 +23,17 @@ def sync_spot_trades(
 ) -> int:
     sync_state = _mark_sync_started(db, "sync_spot_trades")
     try:
-        target_symbols = _normalize_symbols(symbols) or _enabled_symbols(db)
+        target_symbols = sorted(_normalize_symbols(symbols) or _enabled_symbols(db))
+        sync_state.progress_current = 0
+        sync_state.progress_total = len(target_symbols)
+        db.commit()
         inserted = 0
 
-        for symbol_name in sorted(target_symbols):
+        for index, symbol_name in enumerate(target_symbols, start=1):
             symbol = _get_symbol(db, symbol_name)
             if symbol is None:
+                sync_state.progress_current = index
+                db.commit()
                 continue
 
             inserted += _sync_symbol_trades(
@@ -38,6 +43,8 @@ def sync_spot_trades(
                 start_time_ms=start_time_ms,
                 limit=limit,
             )
+            sync_state.progress_current = index
+            db.commit()
 
         _mark_sync_completed(db, sync_state)
         db.commit()
@@ -213,6 +220,9 @@ def _mark_sync_started(db: Session, job_name: str) -> SyncState:
     sync_state.status = "running"
     sync_state.last_started_at = now
     sync_state.error_message = None
+    sync_state.progress_current = 0
+    sync_state.progress_total = None
+    sync_state.progress_message = None
     return sync_state
 
 
@@ -220,6 +230,8 @@ def _mark_sync_completed(db: Session, sync_state: SyncState) -> None:
     sync_state.status = "success"
     sync_state.last_completed_at = utc_now()
     sync_state.error_message = None
+    if sync_state.progress_total is not None:
+        sync_state.progress_current = sync_state.progress_total
 
 
 def _mark_sync_failed(db: Session, job_name: str, error_message: str) -> None:
