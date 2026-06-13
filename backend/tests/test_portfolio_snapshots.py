@@ -2,7 +2,6 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -27,7 +26,6 @@ from app.db.session import get_db
 from app.main import app
 from app.services.dashboard_service import list_holdings
 from app.services.portfolio_service import (
-    MissingPriceError,
     create_portfolio_snapshot,
     get_drawdown_curve,
     get_equity_curve,
@@ -250,15 +248,27 @@ def test_create_portfolio_snapshot_uses_latest_price_and_reward_lots() -> None:
     ]
 
 
-def test_create_portfolio_snapshot_fails_when_a_held_asset_has_no_price() -> None:
+def test_create_portfolio_snapshot_records_unpriced_held_assets() -> None:
     db = make_session()
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="100",
+        observed_at=START,
+    )
+    add_lot(db, asset="BTC", quantity="1", cost_basis="50", event_index=0)
     add_lot(db, asset="ETH", quantity="2", cost_basis="50", event_index=1)
     db.commit()
 
-    with pytest.raises(MissingPriceError) as exc_info:
-        create_portfolio_snapshot(db, base_asset="USDT")
+    snapshot = create_portfolio_snapshot(db, base_asset="USDT", snapshot_at=START)
 
-    assert exc_info.value.missing_assets == ["ETH"]
+    assert snapshot.total_equity == Decimal("100")
+    assert snapshot.total_cost_basis == Decimal("50")
+    assert snapshot.asset_count == 1
+    assert snapshot.missing_price_assets == ["ETH"]
+    assert [holding["asset_code"] for holding in snapshot.holdings] == ["BTC"]
 
 
 def test_create_portfolio_snapshot_values_current_spot_and_earn_balances() -> None:

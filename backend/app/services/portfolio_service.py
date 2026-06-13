@@ -60,11 +60,15 @@ def create_portfolio_snapshot(
     current_prices = _latest_prices_by_asset(db, base_asset=base_asset)
     balance_quantities = _current_balance_quantities(db)
     missing_assets = _missing_price_assets(lots, current_prices, balance_quantities)
-    if missing_assets:
-        raise MissingPriceError(missing_assets)
+    priced_lots = [lot for lot in lots if lot.asset_code in current_prices]
+    priced_balance_quantities = {
+        asset_code: quantity
+        for asset_code, quantity in balance_quantities.items()
+        if asset_code in current_prices
+    }
 
-    symbol_pnl = calculate_symbol_pnl(lots, current_prices=current_prices)
-    holding_values = _holding_values(symbol_pnl, current_prices, balance_quantities)
+    symbol_pnl = calculate_symbol_pnl(priced_lots, current_prices=current_prices)
+    holding_values = _holding_values(symbol_pnl, current_prices, priced_balance_quantities)
     total_equity = sum(holding_values.values(), ZERO)
     total_cost_basis = sum((item.cost_basis for item in symbol_pnl.values()), ZERO)
     earn_rewards_value = sum((item.reward_value for item in symbol_pnl.values()), ZERO)
@@ -89,8 +93,13 @@ def create_portfolio_snapshot(
         realized_pnl=realized_pnl,
         earn_rewards_value=earn_rewards_value,
         asset_count=len(holding_values),
-        holdings=_holdings_payload(symbol_pnl, current_prices, balance_quantities, total_equity),
-        missing_price_assets=[],
+        holdings=_holdings_payload(
+            symbol_pnl,
+            current_prices,
+            priced_balance_quantities,
+            total_equity,
+        ),
+        missing_price_assets=missing_assets,
         snapshot_at=snapshot_at or utc_now(),
     )
     db.add(snapshot)

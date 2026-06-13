@@ -121,7 +121,7 @@ def test_records_sync_returns_failed_subjob_instead_of_raising(monkeypatch) -> N
     }
 
 
-def test_history_windows_are_bounded_to_less_than_ninety_days() -> None:
+def test_history_windows_are_bounded_under_thirty_days() -> None:
     start_time_ms = int(datetime(2021, 1, 1, tzinfo=UTC).timestamp() * 1000)
 
     windows = sync_service._history_windows(start_time_ms)
@@ -132,6 +132,7 @@ def test_history_windows_are_bounded_to_less_than_ninety_days() -> None:
         end_ms - start_ms <= int(sync_service.HISTORY_WINDOW.total_seconds() * 1000)
         for start_ms, end_ms in windows
     )
+    assert sync_service.HISTORY_WINDOW.days == 29
 
 
 def test_records_sync_api_returns_skip_result_instead_of_500(monkeypatch) -> None:

@@ -25,7 +25,7 @@ from app.ingestion.sync_trades import initial_trade_sync_requires_start_time, sy
 from app.services.asset_utils import is_binance_earn_wrapper_asset
 from app.services.portfolio_service import create_portfolio_snapshot
 
-HISTORY_WINDOW = timedelta(days=89)
+HISTORY_WINDOW = timedelta(days=29)
 
 
 class SyncJobError(ValueError):

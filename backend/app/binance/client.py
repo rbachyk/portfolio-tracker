@@ -221,21 +221,27 @@ class BinanceClient:
         current: int = 1,
         size: int = 100,
     ) -> dict[str, Any]:
+        normalized_product_type = product_type.strip().lower()
         endpoint = self._simple_earn_history_endpoint(
             product_type,
             flexible_endpoint=endpoints.EARN_FLEXIBLE_REWARDS,
             locked_endpoint=endpoints.EARN_LOCKED_REWARDS,
         )
+        params = {
+            "asset": asset,
+            "startTime": start_time_ms,
+            "endTime": end_time_ms,
+            "current": current,
+            "size": size,
+        }
+        if normalized_product_type == "flexible":
+            params["type"] = reward_type or "ALL"
+        elif reward_type is not None:
+            params["type"] = reward_type
+
         return self._get_signed(
             endpoint,
-            params={
-                "asset": asset,
-                "type": reward_type,
-                "startTime": start_time_ms,
-                "endTime": end_time_ms,
-                "current": current,
-                "size": size,
-            },
+            params=params,
         )
 
     def get_exchange_info(self, symbols: Sequence[str] | None = None) -> dict[str, Any]:

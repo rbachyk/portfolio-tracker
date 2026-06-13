@@ -192,4 +192,36 @@ def test_simple_earn_history_uses_product_type_endpoint() -> None:
     assert query["startTime"] == ["1"]
     assert query["current"] == ["2"]
     assert query["size"] == ["50"]
+    assert "type" not in query
+    assert "signature" in query
+
+
+def test_flexible_earn_rewards_history_sends_default_reward_type() -> None:
+    captured_request: httpx.Request | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(200, json={"rows": []})
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        api_key="api-key",
+        api_secret="secret",
+        transport=httpx.MockTransport(handler),
+        time_ms=lambda: 1_499_827_319_559,
+    )
+
+    client.get_simple_earn_rewards_history(
+        product_type="flexible",
+        start_time_ms=1,
+        end_time_ms=2,
+    )
+
+    assert captured_request is not None
+    assert captured_request.url.path == "/sapi/v1/simple-earn/flexible/history/rewardsRecord"
+    query = parse_qs(captured_request.url.query.decode("utf-8"))
+    assert query["type"] == ["ALL"]
+    assert query["startTime"] == ["1"]
+    assert query["endTime"] == ["2"]
     assert "signature" in query
