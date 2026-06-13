@@ -213,8 +213,26 @@ function OverviewPage({ api, reloadKey }: PageProps) {
           <div className="metric-grid">
             <MetricCard label="Total equity" value={money(data.total_equity)} />
             <MetricCard label="Deposited capital" value={money(data.total_deposited_capital)} />
-            <MetricCard label="Total PnL" value={money(data.total_pnl)} tone={tone(data.total_pnl)} />
-            <MetricCard label="Total PnL %" value={percent(data.total_pnl_pct)} tone={tone(data.total_pnl)} />
+            <MetricCard
+              label="Unrealized PnL"
+              value={money(data.unrealized_pnl)}
+              tone={tone(data.unrealized_pnl)}
+            />
+            <MetricCard
+              label="Unrealized PnL %"
+              value={percent(data.unrealized_pnl_pct)}
+              tone={tone(data.unrealized_pnl)}
+            />
+            <MetricCard
+              label="Realized PnL"
+              value={money(data.realized_pnl)}
+              tone={tone(data.realized_pnl)}
+            />
+            <MetricCard
+              label="Realized PnL %"
+              value={percent(data.realized_pnl_pct)}
+              tone={tone(data.realized_pnl)}
+            />
             <MetricCard label="24h change" value={money(data.change_24h)} tone={tone(data.change_24h)} />
             <MetricCard label="Earn rewards" value={money(data.earn_rewards_total_value)} />
             <MetricCard label="Assets" value={String(data.asset_count)} />

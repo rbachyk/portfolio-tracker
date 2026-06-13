@@ -69,6 +69,10 @@ export type Overview = {
   total_deposited_capital: string;
   total_pnl: string;
   total_pnl_pct: string | null;
+  unrealized_pnl: string;
+  unrealized_pnl_pct: string | null;
+  realized_pnl: string;
+  realized_pnl_pct: string | null;
   change_24h: string | null;
   earn_rewards_total_value: string;
   asset_count: number;

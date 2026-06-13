@@ -26,7 +26,7 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.main import app
-from app.services.dashboard_service import list_holdings, list_lots
+from app.services.dashboard_service import get_overview, list_holdings, list_lots
 from app.services.portfolio_service import (
     create_portfolio_snapshot,
     get_drawdown_curve,
@@ -249,6 +249,39 @@ def test_create_portfolio_snapshot_uses_latest_price_and_reward_lots() -> None:
             "allocation_pct": "1",
         }
     ]
+
+
+def test_overview_uses_gross_deposited_and_separate_pnl_cards() -> None:
+    db = make_session()
+    db.add(
+        PortfolioSnapshot(
+            base_asset_code="USDT",
+            total_equity=Decimal("1200"),
+            total_cost_basis=Decimal("500"),
+            total_deposited=Decimal("1000"),
+            total_withdrawn=Decimal("200"),
+            net_deposited=Decimal("800"),
+            unrealized_pnl_including_rewards=Decimal("125"),
+            unrealized_pnl_excluding_rewards=Decimal("100"),
+            realized_pnl=Decimal("50"),
+            earn_rewards_value=Decimal("25"),
+            asset_count=2,
+            holdings=[],
+            missing_price_assets=[],
+            snapshot_at=START,
+        )
+    )
+    db.commit()
+
+    overview = get_overview(db, base_asset="USDT")
+
+    assert overview["total_deposited_capital"] == "1000"
+    assert overview["total_pnl"] == "125"
+    assert overview["total_pnl_pct"] == "0.25"
+    assert overview["unrealized_pnl"] == "125"
+    assert overview["unrealized_pnl_pct"] == "0.25"
+    assert overview["realized_pnl"] == "50"
+    assert overview["realized_pnl_pct"] == "0.05"
 
 
 def test_create_portfolio_snapshot_records_unpriced_held_assets() -> None:

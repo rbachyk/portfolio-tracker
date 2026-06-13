@@ -54,22 +54,40 @@ def get_overview(db: Session, *, base_asset: str) -> dict:
             "total_deposited_capital": "0",
             "total_pnl": "0",
             "total_pnl_pct": None,
+            "unrealized_pnl": "0",
+            "unrealized_pnl_pct": None,
+            "realized_pnl": "0",
+            "realized_pnl_pct": None,
             "change_24h": None,
             "earn_rewards_total_value": "0",
             "asset_count": 0,
             "last_sync_time": last_sync,
         }
 
-    total_pnl = latest.total_equity - latest.net_deposited
+    unrealized_pnl = latest.unrealized_pnl_including_rewards
     change_24h = None if previous is None else latest.total_equity - previous.total_equity
+    unrealized_pnl_pct = None
+    if latest.total_cost_basis != ZERO:
+        unrealized_pnl_pct = unrealized_pnl / latest.total_cost_basis
+    realized_pnl_pct = None
+    if latest.total_deposited != ZERO:
+        realized_pnl_pct = latest.realized_pnl / latest.total_deposited
     return {
         "snapshot": portfolio_snapshot_to_dict(latest),
         "total_equity": decimal_to_string(latest.total_equity),
-        "total_deposited_capital": decimal_to_string(latest.net_deposited),
-        "total_pnl": decimal_to_string(total_pnl),
+        "total_deposited_capital": decimal_to_string(latest.total_deposited),
+        "total_pnl": decimal_to_string(unrealized_pnl),
         "total_pnl_pct": None
-        if latest.net_deposited == ZERO
-        else decimal_to_string(total_pnl / latest.net_deposited),
+        if unrealized_pnl_pct is None
+        else decimal_to_string(unrealized_pnl_pct),
+        "unrealized_pnl": decimal_to_string(unrealized_pnl),
+        "unrealized_pnl_pct": None
+        if unrealized_pnl_pct is None
+        else decimal_to_string(unrealized_pnl_pct),
+        "realized_pnl": decimal_to_string(latest.realized_pnl),
+        "realized_pnl_pct": None
+        if realized_pnl_pct is None
+        else decimal_to_string(realized_pnl_pct),
         "change_24h": None if change_24h is None else decimal_to_string(change_24h),
         "earn_rewards_total_value": decimal_to_string(latest.earn_rewards_value),
         "asset_count": latest.asset_count,

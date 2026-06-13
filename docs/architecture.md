@@ -98,6 +98,10 @@ PnL, unrealized PnL with and without Earn rewards, Earn reward value, and a JSON
 holdings breakdown. Performance endpoints read from stored snapshots to return
 equity curve and drawdown data.
 
+Overview cards display gross deposited capital, current unrealized PnL, current
+unrealized PnL percentage against open cost basis, all-time realized PnL, and
+all-time realized PnL percentage against gross deposited capital.
+
 The snapshot layer assumes `build_ledger`, `rebuild_lots`, and `sync_prices` have
 already run. It does not call Binance and does not reconstruct historical prices.
 
