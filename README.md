@@ -194,6 +194,10 @@ backfills. P2P order and Funding transfer history are synced in bounded windows
 because Binance limits those APIs to recent history. For older P2P capital that
 Binance no longer returns, add a manual adjustment or import it separately.
 
+After the first Simple Earn backfill, subscription, redemption, and reward syncs
+resume from the newest stored Earn record with a short overlap instead of
+requesting the full history range every run.
+
 ## Sync Worker
 
 The worker container runs these default intervals, all configurable in `.env`:

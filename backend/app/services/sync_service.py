@@ -4,13 +4,20 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.accounting.ledger_builder import build_ledger_events, rebuild_lots
 from app.binance.client import BinanceClient
 from app.config import Settings
-from app.db.models import EarnPosition, Lot, SpotBalance, TargetAllocation, utc_now
+from app.db.models import (
+    EarnPosition,
+    EarnRedemption,
+    EarnReward,
+    EarnSubscription,
+    SpotBalance,
+    utc_now,
+)
 from app.ingestion.binance_records import (
     mark_sync_completed,
     mark_sync_failed,
@@ -33,6 +40,7 @@ from app.services.portfolio_service import create_portfolio_snapshot
 
 HISTORY_WINDOW = timedelta(days=29)
 RECENT_BINANCE_HISTORY = timedelta(days=179)
+INCREMENTAL_HISTORY_OVERLAP = timedelta(days=2)
 
 
 class SyncJobError(ValueError):
@@ -125,6 +133,11 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
             db,
             settings,
             job_name=job_name,
+            start_time_ms=_incremental_history_start_ms(
+                db,
+                settings,
+                EarnSubscription.subscribed_at,
+            ),
             run=lambda client, start_ms, end_ms: sync_earn_subscriptions(
                 db,
                 client,
@@ -137,6 +150,11 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
             db,
             settings,
             job_name=job_name,
+            start_time_ms=_incremental_history_start_ms(
+                db,
+                settings,
+                EarnRedemption.redeemed_at,
+            ),
             run=lambda client, start_ms, end_ms: sync_earn_redemptions(
                 db,
                 client,
@@ -149,6 +167,11 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
             db,
             settings,
             job_name=job_name,
+            start_time_ms=_incremental_history_start_ms(
+                db,
+                settings,
+                EarnReward.rewarded_at,
+            ),
             run=lambda client, start_ms, end_ms: sync_earn_rewards(
                 db,
                 client,
@@ -264,16 +287,16 @@ def _history_job(
     job_name: str,
     run: Callable[[BinanceClient, int, int], int],
     max_lookback: timedelta | None = None,
+    start_time_ms: int | None = None,
 ) -> dict[str, Any]:
-    if settings.binance_history_sync_start_ms is None:
+    if start_time_ms is None:
+        start_time_ms = settings.binance_history_sync_start_ms
+    if start_time_ms is None:
         return _skipped_job(
             db,
             job_name,
             reason="BINANCE_HISTORY_SYNC_START_MS is not configured",
         )
-    start_time_ms = settings.binance_history_sync_start_ms
-    if start_time_ms is None:
-        raise ValueError("BINANCE_HISTORY_SYNC_START_MS is required")
 
     progress_message = None
     if max_lookback is not None:
@@ -397,6 +420,22 @@ def _history_windows(start_time_ms: int) -> list[tuple[int, int]]:
     return windows
 
 
+def _incremental_history_start_ms(db: Session, settings: Settings, column) -> int | None:
+    configured_start_ms = settings.binance_history_sync_start_ms
+    latest_seen = db.scalar(select(func.max(column)))
+    if latest_seen is None:
+        return configured_start_ms
+
+    if latest_seen.tzinfo is None:
+        latest_seen = latest_seen.replace(tzinfo=UTC)
+    incremental_start_ms = int(
+        (latest_seen - INCREMENTAL_HISTORY_OVERLAP).timestamp() * 1000
+    )
+    if configured_start_ms is None:
+        return incremental_start_ms
+    return max(configured_start_ms, incremental_start_ms)
+
+
 def _tracked_asset_codes(db: Session, *, base_asset: str) -> list[str]:
     base_asset = base_asset.strip().upper()
     asset_codes: set[str] = set()
@@ -405,10 +444,6 @@ def _tracked_asset_codes(db: Session, *, base_asset: str) -> list[str]:
             asset_codes.add(balance.asset_code)
     for position in db.scalars(select(EarnPosition).where(EarnPosition.amount > 0)):
         asset_codes.add(position.asset_code)
-    for lot in db.scalars(select(Lot).where(Lot.remaining_quantity > 0)):
-        asset_codes.add(lot.asset_code)
-    for target in db.scalars(select(TargetAllocation).where(TargetAllocation.is_enabled.is_(True))):
-        asset_codes.add(target.asset_code)
     asset_codes.discard(base_asset)
     return sorted(asset_codes)
 

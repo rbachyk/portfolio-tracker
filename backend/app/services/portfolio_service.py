@@ -60,7 +60,7 @@ def create_portfolio_snapshot(
     lots = _load_lots(db)
     current_prices = _latest_prices_by_asset(db, base_asset=base_asset)
     balance_quantities = _current_balance_quantities(db)
-    missing_assets = _missing_price_assets(lots, current_prices, balance_quantities)
+    missing_assets = _missing_price_assets(current_prices, balance_quantities)
     priced_lots = [lot for lot in lots if lot.asset_code in current_prices]
     priced_balance_quantities = {
         asset_code: quantity
@@ -247,20 +247,14 @@ def _latest_prices_by_asset(db: Session, *, base_asset: str) -> dict[str, Decima
 
 
 def _missing_price_assets(
-    lots: list[LotState],
     prices: dict[str, Decimal],
     balance_quantities: dict[str, Decimal],
 ) -> list[str]:
     held_assets = {
-        lot.asset_code
-        for lot in lots
-        if lot.remaining_quantity > ZERO and lot.asset_code not in prices
-    }
-    held_assets.update(
         asset_code
         for asset_code, quantity in balance_quantities.items()
         if quantity > ZERO and asset_code not in prices
-    )
+    }
     return sorted(held_assets)
 
 
@@ -311,13 +305,9 @@ def _holding_values(
     prices: dict[str, Decimal],
     balance_quantities: dict[str, Decimal],
 ) -> dict[str, Decimal]:
-    asset_codes = set(symbol_pnl) | set(balance_quantities)
     values: dict[str, Decimal] = {}
-    for asset_code in asset_codes:
-        quantity = balance_quantities.get(asset_code)
-        if quantity is None and asset_code in symbol_pnl:
-            quantity = symbol_pnl[asset_code].quantity
-        if quantity is None or quantity <= ZERO:
+    for asset_code, quantity in balance_quantities.items():
+        if quantity <= ZERO:
             continue
         values[asset_code] = quantity * prices[asset_code]
     return values
@@ -330,11 +320,9 @@ def _holdings_payload(
     total_equity: Decimal,
 ) -> list[dict]:
     holdings = []
-    for asset_code in sorted(set(symbol_pnl) | set(balance_quantities)):
+    for asset_code in sorted(balance_quantities):
         item = symbol_pnl.get(asset_code)
         quantity = balance_quantities.get(asset_code)
-        if quantity is None and item is not None:
-            quantity = item.quantity
         if quantity is None or quantity <= ZERO:
             continue
         market_value = quantity * prices[asset_code]

@@ -88,22 +88,19 @@ def list_holdings(db: Session, *, base_asset: str) -> list[dict]:
     spot_quantities = _spot_quantities(db)
     earn_quantities = _earn_quantities(db)
     targets = _target_allocations(db)
-    asset_codes = sorted(
-        set(pnl_by_asset) | set(spot_quantities) | set(earn_quantities) | set(targets)
-    )
+    current_asset_codes = sorted(set(spot_quantities) | set(earn_quantities))
 
     rows = []
     total_market_value = ZERO
-    for asset_code in asset_codes:
+    for asset_code in current_asset_codes:
         current_price = current_prices.get(asset_code)
         spot_quantity = spot_quantities.get(asset_code, ZERO)
         earn_quantity = earn_quantities.get(asset_code, ZERO)
         pnl = pnl_by_asset.get(asset_code)
         accounting_quantity = ZERO if pnl is None else pnl.quantity
-        has_balance_quantity = asset_code in spot_quantities or asset_code in earn_quantities
-        total_quantity = (
-            spot_quantity + earn_quantity if has_balance_quantity else accounting_quantity
-        )
+        total_quantity = spot_quantity + earn_quantity
+        if total_quantity <= ZERO:
+            continue
         market_value = ZERO if current_price is None else total_quantity * current_price
         total_market_value += market_value
         rows.append(
@@ -154,9 +151,12 @@ def list_holdings(db: Session, *, base_asset: str) -> list[dict]:
 
 def list_lots(db: Session, *, base_asset: str, include_closed: bool = False) -> list[dict]:
     current_prices = _latest_prices_by_asset(db, base_asset=base_asset.strip().upper())
+    current_asset_codes = _current_wallet_asset_codes(db)
     rows = []
     lots = db.scalars(select(Lot).order_by(Lot.opened_at, Lot.id)).all()
     for lot in lots:
+        if lot.asset_code not in current_asset_codes:
+            continue
         if not include_closed and lot.remaining_quantity <= ZERO:
             continue
         current_price = current_prices.get(lot.asset_code)
@@ -379,6 +379,10 @@ def _earn_quantities(db: Session) -> dict[str, Decimal]:
     for position in _earn_positions(db):
         totals[position.asset_code] += position.amount
     return dict(totals)
+
+
+def _current_wallet_asset_codes(db: Session) -> set[str]:
+    return set(_spot_quantities(db)) | set(_earn_quantities(db))
 
 
 def _earn_positions(db: Session) -> list[EarnPosition]:

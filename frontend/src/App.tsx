@@ -437,6 +437,7 @@ function EarnPage({ api, reloadKey }: PageProps) {
             <Panel title="Subscriptions">
               <SimpleTable
                 columns={["Asset", "Product", "Amount", "Subscribed"]}
+                pageSize={25}
                 rows={data.subscriptions.map((item) => [
                   item.asset_code,
                   item.product_type,
@@ -448,6 +449,7 @@ function EarnPage({ api, reloadKey }: PageProps) {
             <Panel title="Redemptions">
               <SimpleTable
                 columns={["Asset", "Product", "Amount", "Redeemed"]}
+                pageSize={25}
                 rows={data.redemptions.map((item) => [
                   item.asset_code,
                   item.product_type,

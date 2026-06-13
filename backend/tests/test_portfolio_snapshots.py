@@ -25,7 +25,7 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.main import app
-from app.services.dashboard_service import list_holdings
+from app.services.dashboard_service import list_holdings, list_lots
 from app.services.portfolio_service import (
     create_portfolio_snapshot,
     get_drawdown_curve,
@@ -199,6 +199,7 @@ def test_create_portfolio_snapshot_uses_latest_price_and_reward_lots() -> None:
         event_index=2,
         is_reward=True,
     )
+    db.add(SpotBalance(asset_code="BTC", free=Decimal("1.5"), locked=ZERO, total=Decimal("1.5")))
     deposit_raw = add_raw_event(db, "deposit:1")
     withdrawal_raw = add_raw_event(db, "withdrawal:1")
     db.add(
@@ -261,6 +262,12 @@ def test_create_portfolio_snapshot_records_unpriced_held_assets() -> None:
     )
     add_lot(db, asset="BTC", quantity="1", cost_basis="50", event_index=0)
     add_lot(db, asset="ETH", quantity="2", cost_basis="50", event_index=1)
+    db.add_all(
+        [
+            SpotBalance(asset_code="BTC", free=Decimal("1"), locked=ZERO, total=Decimal("1")),
+            SpotBalance(asset_code="ETH", free=Decimal("2"), locked=ZERO, total=Decimal("2")),
+        ]
+    )
     db.commit()
 
     snapshot = create_portfolio_snapshot(db, base_asset="USDT", snapshot_at=START)
@@ -398,6 +405,36 @@ def test_holdings_hide_ld_wrapper_balances_and_value_earn_positions() -> None:
     assert holdings[0]["market_value"] == "300"
 
 
+def test_holdings_and_lots_only_show_current_wallet_assets() -> None:
+    db = make_session()
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="100",
+        observed_at=START,
+    )
+    add_symbol_price(
+        db,
+        symbol_name="ETHUSDT",
+        base_asset="ETH",
+        quote_asset="USDT",
+        price="10",
+        observed_at=START,
+    )
+    add_lot(db, asset="BTC", quantity="1", cost_basis="50", event_index=1)
+    add_lot(db, asset="ETH", quantity="2", cost_basis="10", event_index=2)
+    db.add(SpotBalance(asset_code="ETH", free=Decimal("2"), locked=ZERO, total=Decimal("2")))
+    db.commit()
+
+    holdings = list_holdings(db, base_asset="USDT")
+    lots = list_lots(db, base_asset="USDT")
+
+    assert [holding["asset_code"] for holding in holdings] == ["ETH"]
+    assert {lot["asset_code"] for lot in lots} == {"ETH"}
+
+
 def test_equity_curve_and_drawdown_are_calculated_from_snapshots() -> None:
     db = make_session()
     add_snapshot(db, total_equity="100", net_deposited="90", days=0)
@@ -441,6 +478,7 @@ def test_portfolio_snapshot_api_endpoints() -> None:
         observed_at=START,
     )
     add_lot(db, asset="BTC", quantity="1", cost_basis="100", event_index=1)
+    db.add(SpotBalance(asset_code="BTC", free=Decimal("1"), locked=ZERO, total=Decimal("1")))
     db.commit()
 
     def override_get_db() -> Generator[Session, None, None]:

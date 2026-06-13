@@ -19,6 +19,7 @@ from app.ingestion.binance_records import (
 
 DEFAULT_EARN_PAGE_SIZE = 100
 EarnProductType = Literal["flexible", "locked"]
+ZERO = Decimal("0")
 
 
 def sync_earn_positions(
@@ -31,8 +32,27 @@ def sync_earn_positions(
     sync_state = mark_sync_started(db, "sync_earn_positions")
     try:
         upserted = 0
+        seen_external_ids: set[str] = set()
+        observed_at = utc_now()
         for product_type in product_types:
-            upserted += _sync_position_type(db, client, product_type=product_type, size=size)
+            type_upserted, type_seen_external_ids = _sync_position_type(
+                db,
+                client,
+                product_type=product_type,
+                size=size,
+                observed_at=observed_at,
+            )
+            upserted += type_upserted
+            seen_external_ids.update(type_seen_external_ids)
+
+        for position in db.scalars(
+            select(EarnPosition).where(EarnPosition.product_type.in_(product_types))
+        ):
+            if position.external_id in seen_external_ids:
+                continue
+            position.amount = ZERO
+            position.snapshot_at = observed_at
+            position.updated_at = observed_at
 
         mark_sync_completed(sync_state)
         db.commit()
@@ -116,9 +136,11 @@ def _sync_position_type(
     *,
     product_type: EarnProductType,
     size: int,
-) -> int:
+    observed_at,
+) -> tuple[int, set[str]]:
     current = 1
     upserted = 0
+    seen_external_ids: set[str] = set()
     while True:
         if product_type == "flexible":
             response = client.get_simple_earn_flexible_positions(current=current, size=size)
@@ -127,9 +149,17 @@ def _sync_position_type(
 
         rows = _response_rows(response)
         for payload in rows:
-            upserted += _upsert_position(db, product_type, payload)
+            external_id = _position_external_id(product_type, payload)
+            seen_external_ids.add(external_id)
+            upserted += _upsert_position(
+                db,
+                product_type,
+                payload,
+                external_id=external_id,
+                observed_at=observed_at,
+            )
         if len(rows) < size:
-            return upserted
+            return upserted, seen_external_ids
         current += 1
 
 
@@ -175,12 +205,22 @@ def _sync_earn_history(
         raise
 
 
-def _upsert_position(db: Session, product_type: EarnProductType, payload: dict) -> int:
-    external_id = deterministic_external_id(
+def _position_external_id(product_type: EarnProductType, payload: dict) -> str:
+    return deterministic_external_id(
         f"earn_position:{product_type}",
         payload,
         ["positionId", "productId", "projectId", "asset"],
     )
+
+
+def _upsert_position(
+    db: Session,
+    product_type: EarnProductType,
+    payload: dict,
+    *,
+    external_id: str,
+    observed_at,
+) -> int:
     asset_code = _asset_code(payload)
     raw_event = upsert_raw_event(
         db,
@@ -204,8 +244,8 @@ def _upsert_position(db: Session, product_type: EarnProductType, payload: dict) 
     position.asset_code = asset_code
     position.amount = _amount(payload, ["totalAmount", "amount", "principal"])
     position.auto_subscribe = payload.get("autoSubscribe")
-    position.snapshot_at = utc_now()
-    position.updated_at = utc_now()
+    position.snapshot_at = observed_at
+    position.updated_at = observed_at
     return inserted
 
 

@@ -58,6 +58,11 @@ Completed P2P buys and sells are treated as external capital flows. Funding to
 Spot transfers are stored for audit and dashboard visibility, but are not counted
 as new capital because they are internal wallet movement.
 
+Simple Earn positions mirror the latest Binance response; positions missing from
+the latest response are marked with zero amount so stale Earn holdings are not
+shown. Earn history jobs perform a full configured backfill once, then resume from
+the newest stored record with a short overlap.
+
 Earn subscriptions and redemptions are stored as movement records, not profit/loss
 events. Earn rewards are stored separately with `cost_basis_mode = ZERO`, preserving
 the current accounting assumption for Phase 5.

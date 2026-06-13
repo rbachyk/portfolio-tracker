@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import require_current_user
 from app.config import Settings, get_settings
-from app.db.models import Asset, Base, Symbol, SyncState
+from app.db.models import Asset, Base, EarnReward, RawBinanceEvent, Symbol, SyncState
 from app.db.session import get_db
 from app.main import app
 from app.services import sync_service
@@ -181,6 +181,43 @@ def test_history_windows_are_bounded_under_thirty_days() -> None:
         for start_ms, end_ms in windows
     )
     assert sync_service.HISTORY_WINDOW.days == 29
+
+
+def test_incremental_earn_history_start_uses_latest_record_with_overlap() -> None:
+    db = make_session()
+    rewarded_at = datetime(2024, 1, 10, tzinfo=UTC)
+    raw_event = RawBinanceEvent(
+        source="binance_simple_earn",
+        event_type="EARN_REWARD",
+        external_id="reward:1",
+        payload={"asset": "USDT", "rewards": "1"},
+    )
+    db.add(raw_event)
+    db.flush()
+    db.add(
+        EarnReward(
+            raw_event_id=raw_event.id,
+            external_id="reward:1",
+            product_type="flexible",
+            asset_code="USDT",
+            amount=1,
+            cost_basis_mode="ZERO",
+            source_endpoint="simple-earn/flexible/rewardsRecord",
+            rewarded_at=rewarded_at,
+        )
+    )
+    db.commit()
+    settings = Settings(
+        binance_history_sync_start_ms=int(datetime(2024, 1, 1, tzinfo=UTC).timestamp() * 1000)
+    )
+
+    start_ms = sync_service._incremental_history_start_ms(
+        db,
+        settings,
+        EarnReward.rewarded_at,
+    )
+
+    assert start_ms == int((rewarded_at - timedelta(days=2)).timestamp() * 1000)
 
 
 def test_records_sync_api_returns_skip_result_instead_of_500(monkeypatch) -> None:

@@ -115,6 +115,19 @@ def test_earn_position_sync_upserts_current_positions() -> None:
     assert len(db.scalars(select(RawBinanceEvent)).all()) == 1
 
 
+def test_earn_position_sync_zeroes_positions_missing_from_latest_response() -> None:
+    db = make_session()
+    client = FakeEarnClient()
+
+    sync_earn_positions(db, client)
+    client.flexible_positions = {"rows": []}
+    sync_earn_positions(db, client)
+
+    position = db.scalar(select(EarnPosition))
+    assert position is not None
+    assert position.amount == Decimal("0E-18")
+
+
 def test_earn_history_sync_stores_subscriptions_redemptions_and_rewards() -> None:
     db = make_session()
     client = FakeEarnClient()
