@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format db-up db-down migrate migrate-local makemigration docker-up docker-down
+.PHONY: help install frontend-install dev frontend-dev frontend-build test lint format db-up db-down migrate migrate-local makemigration docker-up docker-down
 
 UV := uv
 COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf "docker compose"; else printf "docker-compose"; fi)
@@ -6,7 +6,10 @@ COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf "docke
 help:
 	@printf "Available targets:\n"
 	@printf "  make install       Install backend dependencies\n"
+	@printf "  make frontend-install Install frontend dependencies\n"
 	@printf "  make dev           Run FastAPI locally with reload\n"
+	@printf "  make frontend-dev  Run the React dashboard locally\n"
+	@printf "  make frontend-build Build the React dashboard\n"
 	@printf "  make test          Run backend tests\n"
 	@printf "  make lint          Run Ruff checks\n"
 	@printf "  make format        Format backend code\n"
@@ -20,8 +23,17 @@ help:
 install:
 	$(UV) sync --project backend --group dev
 
+frontend-install:
+	npm install --prefix frontend
+
 dev:
 	$(UV) run --project backend --group dev uvicorn app.main:app --reload --app-dir backend --host 0.0.0.0 --port 8000
+
+frontend-dev:
+	npm run dev --prefix frontend
+
+frontend-build:
+	npm run build --prefix frontend
 
 test:
 	$(UV) run --project backend --group dev pytest backend/tests

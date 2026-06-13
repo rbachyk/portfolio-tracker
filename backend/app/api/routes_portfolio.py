@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db.session import get_db
+from app.services.dashboard_service import get_overview, list_holdings
 from app.services.portfolio_service import (
     MissingPriceError,
     create_portfolio_snapshot,
@@ -18,6 +19,22 @@ from app.services.portfolio_service import (
 )
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
+
+
+@router.get("/overview")
+def overview(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    return get_overview(db, base_asset=settings.portfolio_base_asset)
+
+
+@router.get("/holdings")
+def holdings(
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    return {"holdings": list_holdings(db, base_asset=settings.portfolio_base_asset)}
 
 
 @router.post("/snapshots", status_code=status.HTTP_201_CREATED)

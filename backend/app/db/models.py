@@ -100,6 +100,65 @@ class SyncState(Base):
 Index("ix_price_snapshots_symbol_observed_at", PriceSnapshot.symbol, PriceSnapshot.observed_at)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class TargetAllocation(Base):
+    __tablename__ = "target_allocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    target_pct: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class SpotBalance(Base):
+    __tablename__ = "spot_balances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_event_id: Mapped[int | None] = mapped_column(ForeignKey("raw_binance_events.id"))
+    asset_code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    free: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    locked: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    snapshot_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    raw_event: Mapped["RawBinanceEvent | None"] = relationship("RawBinanceEvent")
+
+
 class RawBinanceEvent(Base):
     __tablename__ = "raw_binance_events"
     __table_args__ = (
@@ -113,6 +172,27 @@ class RawBinanceEvent(Base):
     symbol: Mapped[str | None] = mapped_column(String(32), index=True)
     event_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class ManualAdjustment(Base):
+    __tablename__ = "manual_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
+    asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    quote_asset_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    quote_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    reason: Mapped[str | None] = mapped_column(Text)
+    adjusted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now

@@ -85,7 +85,29 @@ equity curve and drawdown data.
 The snapshot layer assumes `build_ledger`, `rebuild_lots`, and `sync_prices` have
 already run. It does not call Binance and does not reconstruct historical prices.
 
+## Phase 7
+
+The application now has a password-protected dashboard and scheduled worker.
+
+Backend additions:
+
+- `users` stores the local dashboard user with a bcrypt password hash.
+- `settings` stores dashboard-editable runtime preferences.
+- `target_allocations` stores configured target weights by asset.
+- `spot_balances` stores the latest free/locked Spot account balance per asset.
+- `manual_adjustments` stores auditable manual ledger corrections.
+- `sync_account_info` records raw Binance account info and updates Spot balances.
+- `sync_service` orchestrates individual sync jobs and grouped runs.
+- `worker` runs market sync, records sync, accounting refresh, and full reconciliation on configurable intervals.
+- Auth, portfolio, holdings, lots, Earn, deposits, settings, symbols, manual adjustment, and sync status APIs are available under `/api`.
+
+Frontend additions:
+
+- React + TypeScript dashboard served by Vite locally and Nginx in Docker.
+- Login page uses `/api/auth/login` and stores only the bearer token in browser storage.
+- Overview, Holdings, Lots, Earn, Deposits, Performance, Settings, and Sync Status pages call real backend APIs.
+- Dashboard quantities intentionally separate Spot balances, Earn positions, and lot-accounting quantities so Earn auto-subscribe movements are not double counted.
+
 ## Planned Later Phases
 
-- Password-protected React dashboard
 - Production deployment documentation

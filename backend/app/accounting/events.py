@@ -26,11 +26,15 @@ class AccountingEvent:
 
     @property
     def is_acquisition(self) -> bool:
-        return self.event_type in {"SPOT_BUY", "EARN_REWARD"}
+        return self.event_type in {"SPOT_BUY", "EARN_REWARD"} or (
+            self.event_type == "MANUAL_ADJUSTMENT" and self.quantity > ZERO
+        )
 
     @property
     def is_disposal(self) -> bool:
-        return self.event_type == "SPOT_SELL"
+        return self.event_type == "SPOT_SELL" or (
+            self.event_type == "MANUAL_ADJUSTMENT" and self.quantity < ZERO
+        )
 
     @property
     def is_reward(self) -> bool:

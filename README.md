@@ -1,6 +1,6 @@
 # Binance Spot Portfolio Tracker
 
-Production-oriented Binance Spot portfolio tracker with ledger-based accounting, Simple Earn support, PostgreSQL persistence, FastAPI backend, and a React dashboard planned for later phases.
+Production-oriented Binance Spot portfolio tracker with ledger-based accounting, Simple Earn support, PostgreSQL persistence, FastAPI backend, scheduled sync worker, and password-protected React dashboard.
 
 ## Current Scope
 
@@ -26,13 +26,19 @@ Implemented so far:
 - Symbol-level and lot-level PnL calculations
 - Portfolio snapshots from rebuilt lots and latest prices
 - Equity curve and drawdown performance endpoints
-
-Authentication and the frontend dashboard are intentionally not implemented yet.
+- Bcrypt-backed single-user dashboard authentication
+- Dashboard APIs for overview, holdings, lots, Earn, deposits, settings, symbols, and sync status
+- Spot account balance sync for free/locked Spot quantity
+- Manual adjustment ledger events
+- Settings, target allocation, user, and Spot balance tables
+- Docker Compose frontend and worker services
+- React + TypeScript dashboard with login, overview, holdings, lots, Earn, deposits, performance, settings, and sync status pages
 
 ## Requirements
 
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 22+ for local frontend development
 - Docker and Docker Compose
 
 ## Local Setup
@@ -40,6 +46,7 @@ Authentication and the frontend dashboard are intentionally not implemented yet.
 ```bash
 cp .env.example .env
 make install
+make frontend-install
 make db-up
 make migrate
 make dev
@@ -49,6 +56,18 @@ The backend will run at:
 
 ```text
 http://localhost:8000
+```
+
+Run the dashboard locally in another shell:
+
+```bash
+make frontend-dev
+```
+
+The Vite dashboard runs at:
+
+```text
+http://localhost:5173
 ```
 
 Health checks:
@@ -69,6 +88,8 @@ This starts:
 
 - `postgres` on port `5432`
 - `backend` on port `8000`
+- `worker` for scheduled sync jobs
+- `frontend` on port `3000`
 
 Stop the stack with:
 
@@ -80,9 +101,31 @@ make docker-down
 
 ```bash
 make test
+make lint
+make frontend-build
 ```
 
-The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, Simple Earn sync, FIFO accounting behavior, portfolio snapshots, and performance endpoints with mocked inputs. They do not call Binance.
+The tests cover the application skeleton, auth, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, Simple Earn sync, FIFO accounting behavior, portfolio snapshots, and performance endpoints with mocked inputs. They do not call Binance.
+
+## Authentication
+
+The dashboard and portfolio APIs require a bearer token from `/api/auth/login`.
+Create a bcrypt password hash and a session secret before running the dashboard:
+
+```bash
+uv run --project backend python -c "from app.services.auth_service import hash_password; print(hash_password('replace-this-password'))"
+openssl rand -hex 32
+```
+
+Put those values in `.env`:
+
+```text
+DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD_HASH=<bcrypt hash>
+SESSION_SECRET=<random hex secret>
+```
+
+The first successful login seeds the local `users` table from the configured hash. Password changes after that are stored as bcrypt hashes in PostgreSQL.
 
 ## Accounting
 
@@ -98,7 +141,7 @@ basis changes.
 
 ## Portfolio Snapshots
 
-Create a snapshot after prices are synced and lots have been rebuilt:
+Create a snapshot after prices are synced and lots have been rebuilt. API calls below require an `Authorization: Bearer <token>` header:
 
 ```bash
 curl -X POST http://localhost:8000/api/portfolio/snapshots
@@ -144,8 +187,24 @@ timestamp in milliseconds earlier than the first trade you want tracked. The syn
 refuses an initial backfill without this value so it cannot silently ingest only
 Binance's most recent trade page.
 
-Deposit, withdrawal, and Simple Earn history sync functions also require an
-explicit `start_time_ms` argument when called so local backfills are intentional.
+Deposit, withdrawal, and Simple Earn history sync functions require
+`BINANCE_HISTORY_SYNC_START_MS` for scheduled or API-triggered backfills.
+
+## Sync Worker
+
+The worker container runs these default intervals, all configurable in `.env`:
+
+- prices/exchange info: every 5 minutes
+- account/trades/deposits/withdrawals/Earn records: every 30 minutes
+- accounting refresh and portfolio snapshot: every 1 hour
+- full reconciliation: once per day
+
+The Sync Status dashboard page can trigger grouped jobs:
+
+- `market_sync`
+- `records_sync`
+- `accounting_refresh`
+- `full_reconciliation`
 
 ## Security Notes
 
@@ -154,9 +213,11 @@ explicit `start_time_ms` argument when called so local backfills are intentional
 - Binance API credentials are read from environment variables only.
 - `BINANCE_API_KEY` and `BINANCE_API_SECRET` must stay in `.env` or another git-ignored secret source.
 - Use a read-only Binance API key. Do not enable trading permissions for this application.
+- Keep `SESSION_SECRET` and `DASHBOARD_PASSWORD_HASH` out of git.
+- Restrict the Binance API key to the VPS IP address when available in your Binance account.
 
 ## Suggested Commit
 
 ```text
-init project structure
+finish phases 0-7 auth sync dashboard
 ```

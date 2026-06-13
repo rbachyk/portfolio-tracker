@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.dependencies import require_current_user
 from app.db.models import (
     Asset,
     Base,
@@ -306,6 +307,7 @@ def test_portfolio_snapshot_api_endpoints() -> None:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_current_user] = lambda: None
 
     try:
         client = TestClient(app)

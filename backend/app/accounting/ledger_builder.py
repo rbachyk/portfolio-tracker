@@ -14,6 +14,7 @@ from app.db.models import (
     EarnSubscription,
     LedgerEvent,
     Lot,
+    ManualAdjustment,
     Trade,
     Withdrawal,
     utc_now,
@@ -66,6 +67,10 @@ def build_accounting_events_from_db(db: Session) -> list[AccountingEvent]:
         events.append(earn_redemption_to_ledger_event(redemption))
     for reward in db.scalars(select(EarnReward).order_by(EarnReward.rewarded_at, EarnReward.id)):
         events.append(earn_reward_to_ledger_event(reward))
+    for adjustment in db.scalars(
+        select(ManualAdjustment).order_by(ManualAdjustment.adjusted_at, ManualAdjustment.id)
+    ):
+        events.append(manual_adjustment_to_ledger_event(adjustment))
     return sorted(events, key=lambda event: (event.event_time, event.external_id))
 
 
@@ -209,6 +214,23 @@ def earn_reward_to_ledger_event(reward: EarnReward) -> AccountingEvent:
         quote_quantity=ZERO,
         event_time=reward.rewarded_at or reward.created_at,
         metadata={"cost_basis_mode": reward.cost_basis_mode},
+    )
+
+
+def manual_adjustment_to_ledger_event(adjustment: ManualAdjustment) -> AccountingEvent:
+    return AccountingEvent(
+        event_type="MANUAL_ADJUSTMENT",
+        external_id=f"manual_adjustment:{adjustment.id}",
+        source_table="manual_adjustments",
+        source_id=adjustment.id,
+        symbol=adjustment.symbol,
+        asset_code=adjustment.asset_code,
+        quote_asset_code=adjustment.quote_asset_code,
+        quantity=adjustment.quantity,
+        quote_quantity=adjustment.quote_quantity,
+        unit_price=adjustment.unit_price,
+        event_time=adjustment.adjusted_at,
+        metadata={"reason": adjustment.reason, "external_id": adjustment.external_id},
     )
 
 
