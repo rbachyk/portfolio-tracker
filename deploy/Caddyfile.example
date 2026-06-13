@@ -1,0 +1,20 @@
+# Replace portfolio.example.com with your dashboard domain.
+# This assumes the frontend container is published only on localhost:
+# FRONTEND_PORT=127.0.0.1:3000
+
+{
+	email admin@example.com
+}
+
+portfolio.example.com {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy interest-cohort=()
+	}
+
+	reverse_proxy 127.0.0.1:3000
+}

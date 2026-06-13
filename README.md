@@ -33,6 +33,9 @@ Implemented so far:
 - Settings, target allocation, user, and Spot balance tables
 - Docker Compose frontend and worker services
 - React + TypeScript dashboard with login, overview, holdings, lots, Earn, deposits, performance, settings, and sync status pages
+- Production Caddy reverse proxy example
+- PostgreSQL backup and restore scripts
+- Production deployment, security, accounting, Binance API, and dashboard docs
 
 ## Requirements
 
@@ -95,6 +98,30 @@ Stop the stack with:
 
 ```bash
 make docker-down
+```
+
+## Production Deployment
+
+Production setup is documented in:
+
+- `docs/deployment.md`
+- `docs/security.md`
+- `docs/accounting-rules.md`
+- `docs/binance-api-map.md`
+- `docs/dashboard-spec.md`
+
+The Caddy reverse proxy example is `deploy/Caddyfile.example`.
+
+Create a PostgreSQL backup:
+
+```bash
+sh scripts/backup-postgres.sh
+```
+
+Restore a backup:
+
+```bash
+sh scripts/restore-postgres.sh backups/postgres_YYYYMMDDTHHMMSSZ.sql.gz
 ```
 
 ## Tests
@@ -235,5 +262,5 @@ the Sync Status page to follow progress and completion.
 ## Suggested Commit
 
 ```text
-finish phases 0-7 auth sync dashboard
+add production deployment docs and backup scripts
 ```

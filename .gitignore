@@ -20,6 +20,7 @@ venv/
 
 # Docker and local runtime files
 postgres_data/
+backups/
 
 # Frontend/build artifacts for later phases
 node_modules/
