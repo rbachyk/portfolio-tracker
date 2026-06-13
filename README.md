@@ -24,8 +24,10 @@ Implemented so far:
 - Ledger event builder for normalized accounting inputs
 - FIFO lot accounting with realized/unrealized PnL helpers
 - Symbol-level and lot-level PnL calculations
+- Portfolio snapshots from rebuilt lots and latest prices
+- Equity curve and drawdown performance endpoints
 
-Portfolio snapshots, authentication, and the frontend dashboard are intentionally not implemented yet.
+Authentication and the frontend dashboard are intentionally not implemented yet.
 
 ## Requirements
 
@@ -80,7 +82,7 @@ make docker-down
 make test
 ```
 
-The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, Simple Earn sync, and FIFO accounting behavior with mocked inputs. They do not call Binance.
+The tests cover the application skeleton, Binance request signing/client behavior, price sync logic, trade sync idempotency, wallet history sync, Simple Earn sync, FIFO accounting behavior, portfolio snapshots, and performance endpoints with mocked inputs. They do not call Binance.
 
 ## Accounting
 
@@ -93,6 +95,26 @@ record realized PnL on the consumed quantity. Earn rewards create zero-cost lots
 and can be reported separately from market price movement. Earn subscriptions
 and redemptions are ledger movement events only; they do not create PnL or cost
 basis changes.
+
+## Portfolio Snapshots
+
+Create a snapshot after prices are synced and lots have been rebuilt:
+
+```bash
+curl -X POST http://localhost:8000/api/portfolio/snapshots
+```
+
+Read stored performance data:
+
+```bash
+curl http://localhost:8000/api/portfolio/snapshots/latest
+curl http://localhost:8000/api/portfolio/performance/equity-curve
+curl http://localhost:8000/api/portfolio/performance/drawdown
+```
+
+Snapshot creation requires a current price for every held asset in the configured
+portfolio base asset, default `USDT`. If a price is missing, the API returns a
+400 response listing the assets that need prices.
 
 ## Migrations
 

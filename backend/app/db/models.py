@@ -339,3 +339,30 @@ class Lot(Base):
     )
 
     source_ledger_event: Mapped[LedgerEvent] = relationship("LedgerEvent")
+
+
+class PortfolioSnapshot(Base):
+    __tablename__ = "portfolio_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base_asset_code: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    total_equity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total_cost_basis: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total_deposited: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    total_withdrawn: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    net_deposited: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unrealized_pnl_including_rewards: Mapped[Decimal] = mapped_column(
+        Numeric(38, 18), nullable=False
+    )
+    unrealized_pnl_excluding_rewards: Mapped[Decimal] = mapped_column(
+        Numeric(38, 18), nullable=False
+    )
+    realized_pnl: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    earn_rewards_value: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    asset_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    holdings: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    missing_price_assets: Mapped[list[str] | None] = mapped_column(JSON)
+    snapshot_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

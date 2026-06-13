@@ -70,8 +70,22 @@ The accounting module exposes lot-level and symbol-level PnL helpers. FIFO is
 the only implemented cost-basis method in this phase; LIFO, HIFO, and average
 cost are reserved for future work.
 
+## Phase 6
+
+Portfolio snapshots are immutable aggregate records built from the current FIFO
+lots and latest available price snapshots in the configured portfolio base asset.
+Snapshot creation fails if any held asset is missing a current price, avoiding a
+partial or misleading total equity value.
+
+Each snapshot stores total equity, cost basis, base-asset cash flows, realized
+PnL, unrealized PnL with and without Earn rewards, Earn reward value, and a JSON
+holdings breakdown. Performance endpoints read from stored snapshots to return
+equity curve and drawdown data.
+
+The snapshot layer assumes `build_ledger`, `rebuild_lots`, and `sync_prices` have
+already run. It does not call Binance and does not reconstruct historical prices.
+
 ## Planned Later Phases
 
-- Portfolio snapshots and performance endpoints
 - Password-protected React dashboard
 - Production deployment documentation

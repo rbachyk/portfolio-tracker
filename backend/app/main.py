@@ -5,6 +5,7 @@ import structlog
 from fastapi import FastAPI
 
 from app.api.routes_health import router as health_router
+from app.api.routes_portfolio import router as portfolio_router
 from app.config import get_settings
 from app.logging import configure_logging
 
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health_router)
+    app.include_router(portfolio_router, prefix=settings.api_prefix)
     return app
 
 
