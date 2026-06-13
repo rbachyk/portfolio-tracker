@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.models import Asset, Base, PriceSnapshot, Symbol, SyncState
-from app.ingestion.sync_prices import sync_exchange_info, sync_prices
+from app.ingestion.sync_prices import sync_exchange_info, sync_prices, sync_prices_for_assets
 
 
 class FakeBinanceClient:
@@ -43,6 +43,16 @@ class ConfigurableExchangeInfoClient:
                 if symbol in self.payloads
             ]
         }
+
+
+class AllTickerClient:
+    def get_ticker_prices(self, symbols: set[str] | None = None) -> list[dict]:
+        assert symbols is None
+        return [
+            {"symbol": "BTCUSDT", "price": "50000"},
+            {"symbol": "ADAUSDT", "price": "0.50"},
+            {"symbol": "NOTUSDT", "price": "1"},
+        ]
 
 
 def make_session() -> Session:
@@ -223,3 +233,26 @@ def test_price_sync_noops_without_enabled_symbols() -> None:
 
     assert inserted == 0
     assert db.scalars(select(PriceSnapshot)).all() == []
+
+
+def test_price_sync_for_assets_creates_symbols_and_prices_for_tracked_assets() -> None:
+    db = make_session()
+    client = AllTickerClient()
+
+    inserted = sync_prices_for_assets(
+        db,
+        client,
+        asset_codes=["ADA", "USDT"],
+        base_asset="USDT",
+    )
+
+    assert inserted == 1
+    assert db.scalars(select(Asset.code).order_by(Asset.code)).all() == ["ADA", "USDT"]
+    symbol = db.scalar(select(Symbol).where(Symbol.symbol == "ADAUSDT"))
+    assert symbol is not None
+    assert symbol.base_asset_code == "ADA"
+    assert symbol.quote_asset_code == "USDT"
+    assert symbol.is_enabled is True
+    snapshot = db.scalar(select(PriceSnapshot).where(PriceSnapshot.symbol == "ADAUSDT"))
+    assert snapshot is not None
+    assert snapshot.price == Decimal("0.500000000000000000")

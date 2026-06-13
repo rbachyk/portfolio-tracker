@@ -11,13 +11,16 @@ from app.accounting.lots import LotState
 from app.accounting.pnl import SymbolPnL, calculate_symbol_pnl
 from app.db.models import (
     Deposit,
+    EarnPosition,
     Lot,
     PortfolioSnapshot,
     PriceSnapshot,
+    SpotBalance,
     Symbol,
     Withdrawal,
     utc_now,
 )
+from app.services.asset_utils import is_binance_earn_wrapper_asset
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -55,12 +58,14 @@ def create_portfolio_snapshot(
     base_asset = base_asset.strip().upper()
     lots = _load_lots(db)
     current_prices = _latest_prices_by_asset(db, base_asset=base_asset)
-    missing_assets = _missing_price_assets(lots, current_prices)
+    balance_quantities = _current_balance_quantities(db)
+    missing_assets = _missing_price_assets(lots, current_prices, balance_quantities)
     if missing_assets:
         raise MissingPriceError(missing_assets)
 
     symbol_pnl = calculate_symbol_pnl(lots, current_prices=current_prices)
-    total_equity = sum((item.market_value for item in symbol_pnl.values()), ZERO)
+    holding_values = _holding_values(symbol_pnl, current_prices, balance_quantities)
+    total_equity = sum(holding_values.values(), ZERO)
     total_cost_basis = sum((item.cost_basis for item in symbol_pnl.values()), ZERO)
     earn_rewards_value = sum((item.reward_value for item in symbol_pnl.values()), ZERO)
     realized_pnl = sum((lot.realized_pnl for lot in lots), ZERO)
@@ -83,8 +88,8 @@ def create_portfolio_snapshot(
         ),
         realized_pnl=realized_pnl,
         earn_rewards_value=earn_rewards_value,
-        asset_count=len(symbol_pnl),
-        holdings=_holdings_payload(symbol_pnl, total_equity),
+        asset_count=len(holding_values),
+        holdings=_holdings_payload(symbol_pnl, current_prices, balance_quantities, total_equity),
         missing_price_assets=[],
         snapshot_at=snapshot_at or utc_now(),
     )
@@ -231,12 +236,21 @@ def _latest_prices_by_asset(db: Session, *, base_asset: str) -> dict[str, Decima
     return prices
 
 
-def _missing_price_assets(lots: list[LotState], prices: dict[str, Decimal]) -> list[str]:
+def _missing_price_assets(
+    lots: list[LotState],
+    prices: dict[str, Decimal],
+    balance_quantities: dict[str, Decimal],
+) -> list[str]:
     held_assets = {
         lot.asset_code
         for lot in lots
         if lot.remaining_quantity > ZERO and lot.asset_code not in prices
     }
+    held_assets.update(
+        asset_code
+        for asset_code, quantity in balance_quantities.items()
+        if quantity > ZERO and asset_code not in prices
+    )
     return sorted(held_assets)
 
 
@@ -260,27 +274,71 @@ def _base_asset_cash_flows(db: Session, base_asset: str) -> tuple[Decimal, Decim
     return deposits, withdrawals
 
 
-def _holdings_payload(symbol_pnl: dict[str, SymbolPnL], total_equity: Decimal) -> list[dict]:
+def _current_balance_quantities(db: Session) -> dict[str, Decimal]:
+    quantities: dict[str, Decimal] = {}
+    for balance in db.scalars(select(SpotBalance)):
+        if balance.total <= ZERO or is_binance_earn_wrapper_asset(balance.asset_code):
+            continue
+        quantities[balance.asset_code] = quantities.get(balance.asset_code, ZERO) + balance.total
+    for position in db.scalars(select(EarnPosition).where(EarnPosition.amount > ZERO)):
+        quantities[position.asset_code] = (
+            quantities.get(position.asset_code, ZERO) + position.amount
+        )
+    return quantities
+
+
+def _holding_values(
+    symbol_pnl: dict[str, SymbolPnL],
+    prices: dict[str, Decimal],
+    balance_quantities: dict[str, Decimal],
+) -> dict[str, Decimal]:
+    asset_codes = set(symbol_pnl) | set(balance_quantities)
+    values: dict[str, Decimal] = {}
+    for asset_code in asset_codes:
+        quantity = balance_quantities.get(asset_code)
+        if quantity is None and asset_code in symbol_pnl:
+            quantity = symbol_pnl[asset_code].quantity
+        if quantity is None or quantity <= ZERO:
+            continue
+        values[asset_code] = quantity * prices[asset_code]
+    return values
+
+
+def _holdings_payload(
+    symbol_pnl: dict[str, SymbolPnL],
+    prices: dict[str, Decimal],
+    balance_quantities: dict[str, Decimal],
+    total_equity: Decimal,
+) -> list[dict]:
     holdings = []
-    for asset_code, item in sorted(symbol_pnl.items()):
-        allocation = None if total_equity == ZERO else item.market_value / total_equity
+    for asset_code in sorted(set(symbol_pnl) | set(balance_quantities)):
+        item = symbol_pnl.get(asset_code)
+        quantity = balance_quantities.get(asset_code)
+        if quantity is None and item is not None:
+            quantity = item.quantity
+        if quantity is None or quantity <= ZERO:
+            continue
+        market_value = quantity * prices[asset_code]
+        allocation = None if total_equity == ZERO else market_value / total_equity
         holdings.append(
             {
                 "asset_code": asset_code,
-                "quantity": decimal_to_string(item.quantity),
+                "quantity": decimal_to_string(quantity),
                 "average_buy_price": None
-                if item.average_buy_price is None
+                if item is None or item.average_buy_price is None
                 else decimal_to_string(item.average_buy_price),
-                "cost_basis": decimal_to_string(item.cost_basis),
-                "market_value": decimal_to_string(item.market_value),
+                "cost_basis": decimal_to_string(ZERO if item is None else item.cost_basis),
+                "market_value": decimal_to_string(market_value),
                 "unrealized_pnl_including_rewards": decimal_to_string(
-                    item.unrealized_pnl_including_rewards
+                    ZERO if item is None else item.unrealized_pnl_including_rewards
                 ),
                 "unrealized_pnl_excluding_rewards": decimal_to_string(
-                    item.unrealized_pnl_excluding_rewards
+                    ZERO if item is None else item.unrealized_pnl_excluding_rewards
                 ),
-                "reward_quantity": decimal_to_string(item.reward_quantity),
-                "reward_value": decimal_to_string(item.reward_value),
+                "reward_quantity": decimal_to_string(
+                    ZERO if item is None else item.reward_quantity
+                ),
+                "reward_value": decimal_to_string(ZERO if item is None else item.reward_value),
                 "allocation_pct": None if allocation is None else decimal_to_string(allocation),
             }
         )

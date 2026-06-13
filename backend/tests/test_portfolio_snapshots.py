@@ -13,16 +13,19 @@ from app.db.models import (
     Asset,
     Base,
     Deposit,
+    EarnPosition,
     LedgerEvent,
     Lot,
     PortfolioSnapshot,
     PriceSnapshot,
     RawBinanceEvent,
+    SpotBalance,
     Symbol,
     Withdrawal,
 )
 from app.db.session import get_db
 from app.main import app
+from app.services.dashboard_service import list_holdings
 from app.services.portfolio_service import (
     MissingPriceError,
     create_portfolio_snapshot,
@@ -256,6 +259,91 @@ def test_create_portfolio_snapshot_fails_when_a_held_asset_has_no_price() -> Non
         create_portfolio_snapshot(db, base_asset="USDT")
 
     assert exc_info.value.missing_assets == ["ETH"]
+
+
+def test_create_portfolio_snapshot_values_current_spot_and_earn_balances() -> None:
+    db = make_session()
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="100",
+        observed_at=START,
+    )
+    add_symbol_price(
+        db,
+        symbol_name="ETHUSDT",
+        base_asset="ETH",
+        quote_asset="USDT",
+        price="10",
+        observed_at=START,
+    )
+    raw = add_raw_event(db, "earn-position:1")
+    db.add_all(
+        [
+            SpotBalance(asset_code="ETH", free=Decimal("2"), locked=ZERO, total=Decimal("2")),
+            SpotBalance(
+                asset_code="LDBTC",
+                free=Decimal("1"),
+                locked=ZERO,
+                total=Decimal("1"),
+            ),
+            EarnPosition(
+                raw_event_id=raw.id,
+                external_id="earn-position:1",
+                product_type="flexible",
+                asset_code="BTC",
+                amount=Decimal("3"),
+            ),
+        ]
+    )
+    db.commit()
+
+    snapshot = create_portfolio_snapshot(db, base_asset="USDT", snapshot_at=START)
+
+    assert snapshot.total_equity == Decimal("320")
+    assert snapshot.asset_count == 2
+    assert [holding["asset_code"] for holding in snapshot.holdings] == ["BTC", "ETH"]
+    assert snapshot.holdings[0]["market_value"] == "300"
+    assert snapshot.holdings[1]["market_value"] == "20"
+
+
+def test_holdings_hide_ld_wrapper_balances_and_value_earn_positions() -> None:
+    db = make_session()
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="100",
+        observed_at=START,
+    )
+    raw = add_raw_event(db, "earn-position:1")
+    db.add_all(
+        [
+            SpotBalance(
+                asset_code="LDBTC",
+                free=Decimal("1"),
+                locked=ZERO,
+                total=Decimal("1"),
+            ),
+            EarnPosition(
+                raw_event_id=raw.id,
+                external_id="earn-position:1",
+                product_type="flexible",
+                asset_code="BTC",
+                amount=Decimal("3"),
+            ),
+        ]
+    )
+    db.commit()
+
+    holdings = list_holdings(db, base_asset="USDT")
+
+    assert [holding["asset_code"] for holding in holdings] == ["BTC"]
+    assert holdings[0]["total_quantity"] == "3"
+    assert holdings[0]["market_value"] == "300"
 
 
 def test_equity_curve_and_drawdown_are_calculated_from_snapshots() -> None:

@@ -95,6 +95,72 @@ def sync_prices(
         raise
 
 
+def sync_prices_for_assets(
+    db: Session,
+    client: BinanceClient,
+    *,
+    asset_codes: Sequence[str],
+    base_asset: str,
+) -> int:
+    sync_state = _mark_sync_started(db, "sync_tracked_asset_prices")
+    try:
+        normalized_base = _normalize_asset_code(base_asset)
+        if normalized_base is None:
+            raise ValueError("base_asset is required")
+
+        normalized_assets = {
+            asset_code
+            for asset_code in (_normalize_asset_code(asset) for asset in asset_codes)
+            if asset_code is not None and asset_code != normalized_base
+        }
+        if not normalized_assets:
+            _mark_sync_completed(db, sync_state)
+            db.commit()
+            return 0
+
+        candidate_symbols = {
+            f"{asset_code}{normalized_base}" for asset_code in normalized_assets
+        }
+        response = client.get_ticker_prices(None)
+        tickers = [response] if isinstance(response, dict) else response
+        observed_at = utc_now()
+
+        inserted = 0
+        _ensure_assets(db, normalized_assets | {normalized_base})
+        for ticker in tickers:
+            symbol_name = ticker["symbol"].upper()
+            if symbol_name not in candidate_symbols:
+                continue
+
+            base_asset_code = symbol_name[: -len(normalized_base)]
+            symbol = _ensure_price_symbol(
+                db,
+                symbol_name=symbol_name,
+                base_asset_code=base_asset_code,
+                quote_asset_code=normalized_base,
+                raw_payload=ticker,
+            )
+            db.add(
+                PriceSnapshot(
+                    symbol_id=symbol.id,
+                    symbol=symbol_name,
+                    price=Decimal(ticker["price"]),
+                    observed_at=observed_at,
+                    raw_payload=ticker,
+                )
+            )
+            inserted += 1
+
+        _mark_sync_completed(db, sync_state)
+        db.commit()
+        return inserted
+    except Exception as exc:
+        db.rollback()
+        _mark_sync_failed(db, "sync_tracked_asset_prices", str(exc))
+        db.commit()
+        raise
+
+
 def _normalize_symbols(symbols: Sequence[str] | None) -> set[str]:
     return {symbol.strip().upper() for symbol in symbols or [] if symbol.strip()}
 
@@ -144,6 +210,28 @@ def _normalize_asset_code(asset_code: object | None) -> str | None:
 
 def _get_symbol(db: Session, symbol: str) -> Symbol | None:
     return db.scalar(select(Symbol).where(Symbol.symbol == symbol))
+
+
+def _ensure_price_symbol(
+    db: Session,
+    *,
+    symbol_name: str,
+    base_asset_code: str,
+    quote_asset_code: str,
+    raw_payload: dict,
+) -> Symbol:
+    symbol = _get_symbol(db, symbol_name)
+    if symbol is None:
+        symbol = Symbol(symbol=symbol_name)
+        db.add(symbol)
+    symbol.base_asset_code = base_asset_code
+    symbol.quote_asset_code = quote_asset_code
+    symbol.status = symbol.status or "TRADING"
+    symbol.is_spot_trading_allowed = True
+    symbol.is_enabled = True
+    symbol.raw_payload = raw_payload
+    db.flush()
+    return symbol
 
 
 def _mark_sync_started(db: Session, job_name: str) -> SyncState:

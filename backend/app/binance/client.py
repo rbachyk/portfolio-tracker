@@ -280,8 +280,10 @@ class BinanceClient:
             response = self._client.request(method, path, params=params, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            response_text = exc.response.text[:500]
             raise BinanceClientError(
-                f"Binance API request failed with status {exc.response.status_code}",
+                "Binance API request failed with status "
+                f"{exc.response.status_code}: {response_text}",
                 status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:

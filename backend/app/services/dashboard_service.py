@@ -26,6 +26,7 @@ from app.db.models import (
     Trade,
     Withdrawal,
 )
+from app.services.asset_utils import is_binance_earn_wrapper_asset
 from app.services.portfolio_service import decimal_to_string, portfolio_snapshot_to_dict
 
 ZERO = Decimal("0")
@@ -345,7 +346,7 @@ def _spot_quantities(db: Session) -> dict[str, Decimal]:
     return {
         balance.asset_code: balance.total
         for balance in db.scalars(select(SpotBalance))
-        if balance.total > ZERO
+        if balance.total > ZERO and not is_binance_earn_wrapper_asset(balance.asset_code)
     }
 
 

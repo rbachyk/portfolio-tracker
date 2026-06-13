@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -90,6 +91,47 @@ def test_records_sync_continues_when_trade_backfill_start_time_is_missing(monkey
         "job_name": "sync_earn_positions",
         "count": 1,
     }
+    assert result["results"]["sync_tracked_asset_prices"] == {
+        "job_name": "sync_tracked_asset_prices",
+        "count": 1,
+    }
+
+
+def test_records_sync_returns_failed_subjob_instead_of_raising(monkeypatch) -> None:
+    db = make_session()
+    settings = Settings()
+
+    def fake_run_sync_job(db, settings, *, job_name):  # noqa: ARG001
+        if job_name == "sync_deposits":
+            raise RuntimeError("Binance API request failed with status 400")
+        return {"job_name": job_name, "count": 1}
+
+    monkeypatch.setattr(sync_service, "run_sync_job", fake_run_sync_job)
+
+    result = run_records_sync(db, settings)
+
+    assert result["results"]["sync_deposits"] == {
+        "job_name": "sync_deposits",
+        "failed": True,
+        "error": "Binance API request failed with status 400",
+    }
+    assert result["results"]["sync_withdrawals"] == {
+        "job_name": "sync_withdrawals",
+        "count": 1,
+    }
+
+
+def test_history_windows_are_bounded_to_less_than_ninety_days() -> None:
+    start_time_ms = int(datetime(2021, 1, 1, tzinfo=UTC).timestamp() * 1000)
+
+    windows = sync_service._history_windows(start_time_ms)
+
+    assert len(windows) > 1
+    assert all(end_ms > start_ms for start_ms, end_ms in windows)
+    assert all(
+        end_ms - start_ms <= int(sync_service.HISTORY_WINDOW.total_seconds() * 1000)
+        for start_ms, end_ms in windows
+    )
 
 
 def test_records_sync_api_returns_skip_result_instead_of_500(monkeypatch) -> None:

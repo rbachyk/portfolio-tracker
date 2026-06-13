@@ -3,7 +3,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from app.binance.client import BinanceClient, BinanceCredentialsError
+from app.binance.client import BinanceClient, BinanceClientError, BinanceCredentialsError
 from app.binance.signing import build_query_string, sign_query_string
 
 
@@ -66,6 +66,19 @@ def test_signed_request_requires_credentials() -> None:
 
     with pytest.raises(BinanceCredentialsError):
         client.get_account_info()
+
+
+def test_error_message_includes_binance_response_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"code": -1128, "msg": "Time range too large"})
+
+    client = BinanceClient(
+        base_url="https://api.binance.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(BinanceClientError, match="Time range too large"):
+        client.get_exchange_info(["BTCUSDT"])
 
 
 def test_exchange_info_uses_symbols_parameter_for_multiple_symbols() -> None:
