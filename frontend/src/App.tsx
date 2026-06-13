@@ -654,12 +654,14 @@ function SettingsPage({ api, reloadKey }: PageProps) {
     setError(null);
     setSaveMessage(null);
     try {
+      const adjustedAt = String(form.get("manual_adjusted_at") || "");
       await api.post("/manual-adjustments", {
         asset_code: String(form.get("manual_asset_code") || ""),
         quantity: String(form.get("manual_quantity") || "0"),
         quote_asset_code: String(form.get("manual_quote_asset_code") || "USDT"),
         quote_quantity: String(form.get("manual_quote_quantity") || "0"),
-        reason: String(form.get("manual_reason") || "")
+        reason: String(form.get("manual_reason") || ""),
+        adjusted_at: adjustedAt ? new Date(adjustedAt).toISOString() : null
       });
       setSaveMessage("Manual adjustment saved. Run accounting refresh to rebuild lots.");
       event.currentTarget.reset();
@@ -793,7 +795,7 @@ function SettingsPage({ api, reloadKey }: PageProps) {
             </Panel>
           </div>
           <div className="dashboard-grid two">
-            <Panel title="Manual Asset Adjustment">
+            <Panel title="Manual Capital / Asset Adjustment">
               <form className="form-grid" onSubmit={createManualAdjustment}>
                 <label>
                   Asset
@@ -813,7 +815,11 @@ function SettingsPage({ api, reloadKey }: PageProps) {
                 </label>
                 <label>
                   Reason
-                  <input name="manual_reason" placeholder="Opening balance correction" />
+                  <input name="manual_reason" placeholder="Older P2P capital correction" />
+                </label>
+                <label>
+                  Adjusted at
+                  <input name="manual_adjusted_at" type="datetime-local" />
                 </label>
                 <button className="primary-button compact" type="submit">
                   Save adjustment
@@ -850,7 +856,7 @@ function SyncPage({ api, reloadKey }: PageProps) {
     setRunMessage(null);
     try {
       await api.post("/sync/run", { job_name: jobName });
-      setRunMessage(`${jobName} finished`);
+      setRunMessage(`${jobName} started. Check Sync Status for progress.`);
     } catch (err) {
       setError(apiErrorMessage(err));
     }

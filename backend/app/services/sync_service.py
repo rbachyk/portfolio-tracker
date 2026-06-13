@@ -41,6 +41,28 @@ from app.services.portfolio_service import create_portfolio_snapshot
 HISTORY_WINDOW = timedelta(days=29)
 RECENT_BINANCE_HISTORY = timedelta(days=179)
 INCREMENTAL_HISTORY_OVERLAP = timedelta(days=2)
+SYNC_JOB_NAMES = {
+    "sync_account_info",
+    "sync_exchange_info",
+    "sync_prices",
+    "sync_tracked_asset_prices",
+    "sync_spot_trades",
+    "sync_deposits",
+    "sync_withdrawals",
+    "sync_p2p_orders",
+    "sync_funding_transfers",
+    "sync_earn_positions",
+    "sync_earn_subscriptions",
+    "sync_earn_redemptions",
+    "sync_earn_rewards",
+    "build_ledger",
+    "rebuild_lots",
+    "create_portfolio_snapshot",
+    "market_sync",
+    "records_sync",
+    "accounting_refresh",
+    "full_reconciliation",
+}
 
 
 class SyncJobError(ValueError):
@@ -49,6 +71,8 @@ class SyncJobError(ValueError):
 
 def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str, Any]:
     job_name = job_name.strip()
+    if job_name not in SYNC_JOB_NAMES:
+        raise SyncJobError(f"Unknown sync job: {job_name}")
     if job_name == "sync_account_info":
         return _with_client(settings, lambda client: sync_account_info(db, client), job_name)
     if job_name == "sync_exchange_info":
@@ -201,6 +225,10 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
     if job_name == "full_reconciliation":
         return run_full_reconciliation(db, settings)
     raise SyncJobError(f"Unknown sync job: {job_name}")
+
+
+def is_sync_job_name(job_name: str) -> bool:
+    return job_name.strip() in SYNC_JOB_NAMES
 
 
 def run_market_sync(db: Session, settings: Settings) -> dict[str, Any]:

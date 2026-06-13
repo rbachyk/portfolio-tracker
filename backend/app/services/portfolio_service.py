@@ -13,6 +13,7 @@ from app.db.models import (
     Deposit,
     EarnPosition,
     Lot,
+    ManualAdjustment,
     P2POrder,
     PortfolioSnapshot,
     PriceSnapshot,
@@ -284,6 +285,13 @@ def _base_asset_cash_flows(db: Session, base_asset: str) -> tuple[Decimal, Decim
             deposits += order.amount
         elif order.trade_type == "SELL":
             withdrawals += order.amount
+    for adjustment in db.scalars(
+        select(ManualAdjustment).where(ManualAdjustment.asset_code == base_asset)
+    ):
+        if adjustment.quantity > ZERO:
+            deposits += adjustment.quantity
+        elif adjustment.quantity < ZERO:
+            withdrawals += abs(adjustment.quantity)
     return deposits, withdrawals
 
 

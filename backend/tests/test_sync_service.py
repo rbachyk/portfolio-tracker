@@ -243,5 +243,8 @@ def test_records_sync_api_returns_skip_result_instead_of_500(monkeypatch) -> Non
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json()["results"]["sync_spot_trades"]["skipped"] is True
+    assert response.status_code == 202
+    assert response.json() == {"job_name": "records_sync", "status": "started"}
+    sync_state = db.scalar(select(SyncState).where(SyncState.job_name == "sync_spot_trades"))
+    assert sync_state is not None
+    assert sync_state.status == "skipped"

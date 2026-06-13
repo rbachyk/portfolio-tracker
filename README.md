@@ -198,6 +198,11 @@ After the first Simple Earn backfill, subscription, redemption, and reward syncs
 resume from the newest stored Earn record with a short overlap instead of
 requesting the full history range every run.
 
+If older P2P orders are no longer available from Binance's P2P API, add dated
+manual adjustments in the portfolio base asset. Positive base-asset adjustments
+increase deposited capital, and negative base-asset adjustments increase
+withdrawn capital.
+
 ## Sync Worker
 
 The worker container runs these default intervals, all configurable in `.env`:
@@ -213,6 +218,9 @@ The Sync Status dashboard page can trigger grouped jobs:
 - `records_sync`
 - `accounting_refresh`
 - `full_reconciliation`
+
+Manual sync triggers return immediately and continue in the backend process. Use
+the Sync Status page to follow progress and completion.
 
 ## Security Notes
 

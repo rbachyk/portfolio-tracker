@@ -58,6 +58,9 @@ Completed P2P buys and sells are treated as external capital flows. Funding to
 Spot transfers are stored for audit and dashboard visibility, but are not counted
 as new capital because they are internal wallet movement.
 
+Base-asset manual adjustments are included in capital-flow totals, which gives an
+audit trail for older P2P capital that Binance no longer exposes through the API.
+
 Simple Earn positions mirror the latest Binance response; positions missing from
 the latest response are marked with zero amount so stale Earn holdings are not
 shown. Earn history jobs perform a full configured backfill once, then resume from
@@ -111,6 +114,8 @@ Backend additions:
 - `manual_adjustments` stores auditable manual ledger corrections.
 - `sync_account_info` records raw Binance account info and updates Spot balances.
 - `sync_service` orchestrates individual sync jobs and grouped runs.
+- Manual sync API requests enqueue background work and return immediately; progress
+  is read from `sync_state`.
 - `worker` runs market sync, records sync, accounting refresh, and full reconciliation on configurable intervals.
 - Auth, portfolio, holdings, lots, Earn, deposits, settings, symbols, manual adjustment, and sync status APIs are available under `/api`.
 

@@ -15,6 +15,7 @@ from app.db.models import (
     EarnPosition,
     LedgerEvent,
     Lot,
+    ManualAdjustment,
     P2POrder,
     PortfolioSnapshot,
     PriceSnapshot,
@@ -366,6 +367,37 @@ def test_create_portfolio_snapshot_counts_completed_p2p_orders_as_capital_flows(
     assert snapshot.total_deposited == Decimal("100")
     assert snapshot.total_withdrawn == Decimal("25")
     assert snapshot.net_deposited == Decimal("75")
+
+
+def test_create_portfolio_snapshot_counts_base_asset_manual_adjustments_as_capital() -> None:
+    db = make_session()
+    db.add_all(
+        [
+            ManualAdjustment(
+                external_id="manual:deposit",
+                asset_code="USDT",
+                quote_asset_code="USDT",
+                quantity=Decimal("500"),
+                quote_quantity=ZERO,
+                adjusted_at=START,
+            ),
+            ManualAdjustment(
+                external_id="manual:withdrawal",
+                asset_code="USDT",
+                quote_asset_code="USDT",
+                quantity=Decimal("-100"),
+                quote_quantity=ZERO,
+                adjusted_at=START + timedelta(minutes=1),
+            ),
+        ]
+    )
+    db.commit()
+
+    snapshot = create_portfolio_snapshot(db, base_asset="USDT", snapshot_at=START)
+
+    assert snapshot.total_deposited == Decimal("500")
+    assert snapshot.total_withdrawn == Decimal("100")
+    assert snapshot.net_deposited == Decimal("400")
 
 
 def test_holdings_hide_ld_wrapper_balances_and_value_earn_positions() -> None:
