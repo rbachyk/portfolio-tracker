@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.accounting.ledger_builder import build_ledger_events, rebuild_lots
 from app.binance.client import BinanceClient
 from app.config import Settings
+from app.db.models import utc_now
 from app.ingestion.binance_records import mark_sync_completed, mark_sync_failed, mark_sync_started
 from app.ingestion.sync_account import sync_account_info
 from app.ingestion.sync_deposits import sync_deposits, sync_withdrawals
@@ -18,7 +19,7 @@ from app.ingestion.sync_earn import (
     sync_earn_subscriptions,
 )
 from app.ingestion.sync_prices import sync_exchange_info, sync_prices
-from app.ingestion.sync_trades import sync_spot_trades
+from app.ingestion.sync_trades import initial_trade_sync_requires_start_time, sync_spot_trades
 from app.services.portfolio_service import create_portfolio_snapshot
 
 
@@ -43,15 +44,7 @@ def run_sync_job(db: Session, settings: Settings, *, job_name: str) -> dict[str,
     if job_name == "sync_prices":
         return _with_client(settings, lambda client: sync_prices(db, client), job_name)
     if job_name == "sync_spot_trades":
-        return _with_client(
-            settings,
-            lambda client: sync_spot_trades(
-                db,
-                client,
-                start_time_ms=settings.binance_trade_sync_start_ms,
-            ),
-            job_name,
-        )
+        return _trade_history_job(db, settings)
     if job_name == "sync_deposits":
         return _history_job(
             db,
@@ -190,16 +183,47 @@ def _history_job(
     run: Callable[[BinanceClient, int], int],
 ) -> dict[str, Any]:
     if settings.binance_history_sync_start_ms is None:
-        return {
-            "job_name": job_name,
-            "skipped": True,
-            "reason": "BINANCE_HISTORY_SYNC_START_MS is not configured",
-        }
+        return _skipped_job(
+            db,
+            job_name,
+            reason="BINANCE_HISTORY_SYNC_START_MS is not configured",
+        )
     return _with_client(
         settings,
         lambda client: run(client, settings.binance_history_sync_start_ms or 0),
         job_name,
     )
+
+
+def _trade_history_job(db: Session, settings: Settings) -> dict[str, Any]:
+    if (
+        settings.binance_trade_sync_start_ms is None
+        and initial_trade_sync_requires_start_time(db, symbols=settings.configured_symbols)
+    ):
+        return _skipped_job(
+            db,
+            "sync_spot_trades",
+            reason="BINANCE_TRADE_SYNC_START_MS is required before initial trade sync",
+        )
+
+    return _with_client(
+        settings,
+        lambda client: sync_spot_trades(
+            db,
+            client,
+            start_time_ms=settings.binance_trade_sync_start_ms,
+        ),
+        "sync_spot_trades",
+    )
+
+
+def _skipped_job(db: Session, job_name: str, *, reason: str) -> dict[str, Any]:
+    sync_state = mark_sync_started(db, job_name)
+    sync_state.status = "skipped"
+    sync_state.last_completed_at = utc_now()
+    sync_state.error_message = reason
+    db.commit()
+    return {"job_name": job_name, "skipped": True, "reason": reason}
 
 
 def _tracked_db_job(db: Session, job_name: str, run: Callable[[], int]) -> dict[str, Any]:

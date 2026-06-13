@@ -25,20 +25,19 @@ def sync_exchange_info(
 
     response = client.get_exchange_info(normalized_configured or None)
     symbols = response.get("symbols", [])
+    _ensure_assets(db, _asset_codes_from_symbols(symbols))
 
     synced = 0
     for payload in symbols:
         symbol_name = payload["symbol"].upper()
-        _upsert_asset(db, payload.get("baseAsset"))
-        _upsert_asset(db, payload.get("quoteAsset"))
         symbol = _get_symbol(db, symbol_name)
 
         if symbol is None:
             symbol = Symbol(symbol=symbol_name)
             db.add(symbol)
 
-        symbol.base_asset_code = payload.get("baseAsset")
-        symbol.quote_asset_code = payload.get("quoteAsset")
+        symbol.base_asset_code = _normalize_asset_code(payload.get("baseAsset"))
+        symbol.quote_asset_code = _normalize_asset_code(payload.get("quoteAsset"))
         symbol.status = payload.get("status")
         symbol.is_spot_trading_allowed = bool(payload.get("isSpotTradingAllowed", False))
         if normalized_configured:
@@ -110,16 +109,37 @@ def _disable_symbols_not_configured(db: Session, configured_symbols: set[str]) -
             symbol.is_enabled = False
 
 
-def _upsert_asset(db: Session, asset_code: str | None) -> Asset | None:
+def _asset_codes_from_symbols(symbols: Sequence[dict]) -> set[str]:
+    asset_codes: set[str] = set()
+    for payload in symbols:
+        for key in ("baseAsset", "quoteAsset"):
+            asset_code = _normalize_asset_code(payload.get(key))
+            if asset_code is not None:
+                asset_codes.add(asset_code)
+    return asset_codes
+
+
+def _ensure_assets(db: Session, asset_codes: set[str]) -> None:
+    if not asset_codes:
+        return
+
+    existing_codes = set(
+        db.scalars(select(Asset.code).where(Asset.code.in_(asset_codes))).all()
+    )
+    pending_codes = {
+        asset.code
+        for asset in db.new
+        if isinstance(asset, Asset) and asset.code in asset_codes
+    }
+    for asset_code in sorted(asset_codes - existing_codes - pending_codes):
+        db.add(Asset(code=asset_code))
+
+
+def _normalize_asset_code(asset_code: object | None) -> str | None:
     if asset_code is None:
         return None
-
-    asset_code = asset_code.upper()
-    asset = db.scalar(select(Asset).where(Asset.code == asset_code))
-    if asset is None:
-        asset = Asset(code=asset_code)
-        db.add(asset)
-    return asset
+    normalized = str(asset_code).strip().upper()
+    return normalized or None
 
 
 def _get_symbol(db: Session, symbol: str) -> Symbol | None:

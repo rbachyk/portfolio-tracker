@@ -72,6 +72,55 @@ def test_exchange_info_sync_upserts_configured_symbol_and_assets() -> None:
     assert symbol.is_enabled is True
 
 
+def test_exchange_info_sync_deduplicates_shared_quote_asset_and_repeated_runs() -> None:
+    db = make_session()
+    db.add(Asset(code="USDT"))
+    db.commit()
+    usdt_id = db.scalar(select(Asset.id).where(Asset.code == "USDT"))
+    client = ConfigurableExchangeInfoClient(
+        {
+            "BTCUSDT": {
+                "symbol": "BTCUSDT",
+                "status": "TRADING",
+                "baseAsset": "BTC",
+                "quoteAsset": "USDT",
+                "isSpotTradingAllowed": True,
+            },
+            "ETHUSDT": {
+                "symbol": "ETHUSDT",
+                "status": "TRADING",
+                "baseAsset": "ETH",
+                "quoteAsset": "USDT",
+                "isSpotTradingAllowed": True,
+            },
+        }
+    )
+
+    first_synced = sync_exchange_info(
+        db,
+        client,
+        configured_symbols=["BTCUSDT", "ETHUSDT"],
+    )
+    second_synced = sync_exchange_info(
+        db,
+        client,
+        configured_symbols=["BTCUSDT", "ETHUSDT"],
+    )
+
+    assert first_synced == 2
+    assert second_synced == 2
+    assert db.scalars(select(Asset.code).order_by(Asset.code)).all() == [
+        "BTC",
+        "ETH",
+        "USDT",
+    ]
+    assert db.scalar(select(Asset.id).where(Asset.code == "USDT")) == usdt_id
+    assert db.scalars(select(Symbol.symbol).order_by(Symbol.symbol)).all() == [
+        "BTCUSDT",
+        "ETHUSDT",
+    ]
+
+
 def test_exchange_info_sync_disables_symbols_removed_from_configuration() -> None:
     db = make_session()
     db.add_all(

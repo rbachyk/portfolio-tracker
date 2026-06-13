@@ -49,6 +49,19 @@ def sync_spot_trades(
         raise
 
 
+def initial_trade_sync_requires_start_time(
+    db: Session,
+    *,
+    symbols: Sequence[str] | None = None,
+) -> bool:
+    target_symbols = _normalize_symbols(symbols) or _enabled_symbols(db)
+    for symbol_name in sorted(target_symbols):
+        symbol = _get_symbol(db, symbol_name)
+        if symbol is not None and _next_trade_from_id(db, symbol.symbol) is None:
+            return True
+    return False
+
+
 def _sync_symbol_trades(
     db: Session,
     client: BinanceClient,
