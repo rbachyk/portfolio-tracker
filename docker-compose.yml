@@ -1,12 +1,13 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: portfolio_tracker_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-crypto_portfolio_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crypto_portfolio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-crypto_portfolio}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,23 +19,24 @@ services:
   backend:
     build:
       context: ./backend
+    container_name: portfolio_tracker_backend
     environment:
       APP_NAME: ${APP_NAME:-Binance Spot Portfolio Tracker}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_PREFIX: ${API_PREFIX:-/api}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crypto_portfolio_user}:${POSTGRES_PASSWORD:-crypto_portfolio}@postgres:5432/${POSTGRES_DB:-crypto_portfolio}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crypto_portfolio_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-crypto_portfolio}
       BINANCE_BASE_URL: ${BINANCE_BASE_URL:-https://api.binance.com}
-      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
-      BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+      BINANCE_API_KEY: ${BINANCE_API_KEY:?BINANCE_API_KEY is required}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET:?BINANCE_API_SECRET is required}
       BINANCE_RECV_WINDOW_MS: ${BINANCE_RECV_WINDOW_MS:-5000}
       BINANCE_SYMBOLS: ${BINANCE_SYMBOLS:-}
       BINANCE_TRADE_SYNC_START_MS: ${BINANCE_TRADE_SYNC_START_MS:-}
       BINANCE_HISTORY_SYNC_START_MS: ${BINANCE_HISTORY_SYNC_START_MS:-}
       PORTFOLIO_BASE_ASSET: ${PORTFOLIO_BASE_ASSET:-USDT}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
-      DASHBOARD_PASSWORD_HASH: ${DASHBOARD_PASSWORD_HASH:-}
-      SESSION_SECRET: ${SESSION_SECRET:-}
+      DASHBOARD_PASSWORD_HASH: ${DASHBOARD_PASSWORD_HASH:?DASHBOARD_PASSWORD_HASH is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
       INCLUDE_EARN_REWARDS_IN_PNL: ${INCLUDE_EARN_REWARDS_IN_PNL:-true}
       COST_BASIS_METHOD: ${COST_BASIS_METHOD:-FIFO}
@@ -43,9 +45,9 @@ services:
       SNAPSHOT_INTERVAL_SECONDS: ${SNAPSHOT_INTERVAL_SECONDS:-3600}
       FULL_RECONCILIATION_INTERVAL_SECONDS: ${FULL_RECONCILIATION_INTERVAL_SECONDS:-86400}
       WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-15}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://portfolio-tracker.datonum.com}
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,24 +55,25 @@ services:
   worker:
     build:
       context: ./backend
-    command: sh -c "uv run --no-sync alembic upgrade head && uv run --no-sync python -m app.worker"
+    container_name: portfolio_tracker_worker
+    command: sh -c "uv run --no-sync python -m app.worker"
     environment:
       APP_NAME: ${APP_NAME:-Binance Spot Portfolio Tracker}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_PREFIX: ${API_PREFIX:-/api}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crypto_portfolio_user}:${POSTGRES_PASSWORD:-crypto_portfolio}@postgres:5432/${POSTGRES_DB:-crypto_portfolio}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crypto_portfolio_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-crypto_portfolio}
       BINANCE_BASE_URL: ${BINANCE_BASE_URL:-https://api.binance.com}
-      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
-      BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+      BINANCE_API_KEY: ${BINANCE_API_KEY:?BINANCE_API_KEY is required}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET:?BINANCE_API_SECRET is required}
       BINANCE_RECV_WINDOW_MS: ${BINANCE_RECV_WINDOW_MS:-5000}
       BINANCE_SYMBOLS: ${BINANCE_SYMBOLS:-}
       BINANCE_TRADE_SYNC_START_MS: ${BINANCE_TRADE_SYNC_START_MS:-}
       BINANCE_HISTORY_SYNC_START_MS: ${BINANCE_HISTORY_SYNC_START_MS:-}
       PORTFOLIO_BASE_ASSET: ${PORTFOLIO_BASE_ASSET:-USDT}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
-      DASHBOARD_PASSWORD_HASH: ${DASHBOARD_PASSWORD_HASH:-}
-      SESSION_SECRET: ${SESSION_SECRET:-}
+      DASHBOARD_PASSWORD_HASH: ${DASHBOARD_PASSWORD_HASH:?DASHBOARD_PASSWORD_HASH is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       INCLUDE_EARN_REWARDS_IN_PNL: ${INCLUDE_EARN_REWARDS_IN_PNL:-true}
       COST_BASIS_METHOD: ${COST_BASIS_METHOD:-FIFO}
       PRICE_SYNC_INTERVAL_SECONDS: ${PRICE_SYNC_INTERVAL_SECONDS:-300}
@@ -85,10 +88,19 @@ services:
   frontend:
     build:
       context: ./frontend
-    ports:
-      - "${FRONTEND_PORT:-3000}:80"
+    container_name: portfolio_tracker_frontend
     depends_on:
       - backend
+    networks:
+      - default
+      - ai_stack_public_proxy
+    expose:
+      - "80"
 
 volumes:
   postgres_data:
+
+networks:
+  ai_stack_public_proxy:
+    external: true
+    name: ai_stack_public_proxy
