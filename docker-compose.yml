@@ -21,7 +21,7 @@ services:
       context: ./backend
     container_name: portfolio_tracker_backend
     environment:
-      APP_NAME: ${APP_NAME:-Binance Spot Portfolio Tracker}
+      APP_NAME: ${APP_NAME:-Crypto Portfolio Tracker}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_PREFIX: ${API_PREFIX:-/api}
@@ -58,7 +58,7 @@ services:
     container_name: portfolio_tracker_worker
     command: sh -c "uv run --no-sync python -m app.worker"
     environment:
-      APP_NAME: ${APP_NAME:-Binance Spot Portfolio Tracker}
+      APP_NAME: ${APP_NAME:-Crypto Portfolio Tracker}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       API_PREFIX: ${API_PREFIX:-/api}
