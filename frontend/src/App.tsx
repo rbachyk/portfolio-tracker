@@ -18,7 +18,7 @@ import {
   TerminalSquare,
   Wallet,
 } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ApiClient,
@@ -131,21 +131,22 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem("username"));
   const [page, setPage] = useState<Page>("overview");
   const [reloadKey, setReloadKey] = useState(0);
-  const api = useMemo(() => new ApiClient(() => token), [token]);
 
-  function handleLogin(response: LoginResponse) {
+  const handleLogin = useCallback((response: LoginResponse) => {
     localStorage.setItem("access_token", response.access_token);
     localStorage.setItem("username", response.username);
     setToken(response.access_token);
     setUsername(response.username);
-  }
+  }, []);
 
-  function handleLogout() {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("username");
     setToken(null);
     setUsername(null);
-  }
+  }, []);
+
+  const api = useMemo(() => new ApiClient(() => token, handleLogout), [token, handleLogout]);
 
   if (!token) {
     return <LoginView api={api} onLogin={handleLogin} />;
@@ -162,6 +163,7 @@ export default function App() {
           api={api}
           reloadKey={reloadKey}
           onRefresh={() => setReloadKey((value) => value + 1)}
+          onLogout={handleLogout}
         />
         <div className="page">
           <Content page={page} api={api} reloadKey={reloadKey} />
@@ -253,11 +255,13 @@ function Topbar({
   api,
   reloadKey,
   onRefresh,
+  onLogout,
 }: {
   meta: { title: string; subtitle: string };
   api: ApiClient;
   reloadKey: number;
   onRefresh: () => void;
+  onLogout: () => void;
 }) {
   const { theme, toggle } = useTheme();
   const sync = useSyncPulse(api, reloadKey);
@@ -275,6 +279,9 @@ function Topbar({
         </Button>
         <Button variant="icon" onClick={onRefresh} title="Refresh data">
           <RefreshCw size={18} />
+        </Button>
+        <Button variant="icon" className="mobile-only" onClick={onLogout} title="Sign out">
+          <LogOut size={18} />
         </Button>
       </div>
     </header>

@@ -6,7 +6,10 @@ export type ApiError = {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export class ApiClient {
-  constructor(private readonly getToken: () => string | null) {}
+  constructor(
+    private readonly getToken: () => string | null,
+    private readonly onUnauthorized?: () => void,
+  ) {}
 
   async get<T>(path: string): Promise<T> {
     return this.request<T>(path, { method: "GET" });
@@ -45,6 +48,11 @@ export class ApiClient {
         message = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
       } catch {
         message = response.statusText;
+      }
+      // An expired/invalid session (we sent a token but got 401) should drop
+      // the user back to the login screen rather than surface on every page.
+      if (response.status === 401 && token) {
+        this.onUnauthorized?.();
       }
       throw { status: response.status, message } satisfies ApiError;
     }

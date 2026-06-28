@@ -383,6 +383,11 @@ table td,
   display: none;
 }
 
+/* shown only when the sidebar (which holds sign-out) is collapsed on mobile */
+.btn.mobile-only {
+  display: none;
+}
+
 /* --------------------------------------------------------------- sync pill */
 .sync-pill {
   align-items: center;
@@ -1683,6 +1688,9 @@ input::placeholder {
   }
   .sidebar {
     display: none;
+  }
+  .btn.mobile-only {
+    display: inline-flex;
   }
   .topbar {
     padding: 14px 16px;
