@@ -26,7 +26,12 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.main import app
-from app.services.dashboard_service import get_overview, list_holdings, list_lots
+from app.services.dashboard_service import (
+    get_overview,
+    list_asset_prices,
+    list_holdings,
+    list_lots,
+)
 from app.services.portfolio_service import (
     create_portfolio_snapshot,
     get_drawdown_curve,
@@ -569,3 +574,41 @@ def test_portfolio_snapshot_api_endpoints() -> None:
     assert equity_response.json()["points"][0]["total_equity"] == "200"
     assert drawdown_response.status_code == 200
     assert drawdown_response.json()["points"][0]["drawdown"] == "0"
+
+
+def test_list_asset_prices_returns_latest_price_per_asset() -> None:
+    db = make_session()
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="60000",
+        observed_at=START,
+    )
+    add_symbol_price(
+        db,
+        symbol_name="BTCUSDT",
+        base_asset="BTC",
+        quote_asset="USDT",
+        price="67000",
+        observed_at=START + timedelta(hours=1),
+    )
+    add_symbol_price(
+        db,
+        symbol_name="ETHUSDT",
+        base_asset="ETH",
+        quote_asset="USDT",
+        price="3200",
+        observed_at=START,
+    )
+    db.commit()
+
+    by_asset = {
+        row["asset_code"]: Decimal(row["price"])
+        for row in list_asset_prices(db, base_asset="USDT")
+    }
+
+    assert by_asset["USDT"] == Decimal("1")
+    assert by_asset["BTC"] == Decimal("67000")  # latest snapshot wins
+    assert by_asset["ETH"] == Decimal("3200")

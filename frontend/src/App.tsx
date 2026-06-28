@@ -912,6 +912,7 @@ function computeRebalance(
   holdings: Holding[],
   targets: Array<{ asset_code: string; target_pct: string; is_enabled: boolean }>,
   contribution: number,
+  priceByAsset: Map<string, number>,
 ): RebalancePlan {
   const nonCash = holdings.filter((item) => !CASH_ASSETS.has(item.asset_code));
   const holdingByAsset = new Map(nonCash.map((item) => [item.asset_code, item]));
@@ -942,7 +943,7 @@ function computeRebalance(
     const holding = holdingByAsset.get(asset);
     const weight = weightByAsset.get(asset) ?? 0;
     const current = toNumber(holding?.market_value) ?? 0;
-    const price = toNumber(holding?.current_price);
+    const price = toNumber(holding?.current_price) ?? priceByAsset.get(asset) ?? null;
     let buyValue = 0;
     if (contribution > 0) {
       if (sumDeficit <= 1e-9) buyValue = weight * contribution;
@@ -1002,6 +1003,10 @@ function orderCsv(rows: PlanRow[]): string {
 function RebalancePage({ api, reloadKey }: PageProps) {
   const holdingsRes = useResource<{ holdings: Holding[] }>(() => api.get("/portfolio/holdings"), [api, reloadKey]);
   const settingsRes = useResource<SettingsPayload>(() => api.get("/settings"), [api, reloadKey]);
+  const pricesRes = useResource<{ base_asset: string; prices: Array<{ asset_code: string; price: string }> }>(
+    () => api.get("/portfolio/prices"),
+    [api, reloadKey],
+  );
   const [amount, setAmount] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -1011,7 +1016,19 @@ function RebalancePage({ api, reloadKey }: PageProps) {
     .filter((item) => CASH_ASSETS.has(item.asset_code))
     .reduce((sum, item) => sum + (toNumber(item.market_value) ?? 0), 0);
 
-  const plan = useMemo(() => computeRebalance(holdings, targets, amount), [holdings, targets, amount]);
+  const priceByAsset = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of pricesRes.data?.prices ?? []) {
+      const value = toNumber(entry.price);
+      if (value !== null) map.set(entry.asset_code, value);
+    }
+    return map;
+  }, [pricesRes.data]);
+
+  const plan = useMemo(
+    () => computeRebalance(holdings, targets, amount, priceByAsset),
+    [holdings, targets, amount, priceByAsset],
+  );
 
   if (holdingsRes.isLoading || settingsRes.isLoading) return <SkeletonStack rows={4} />;
   const err = holdingsRes.error || settingsRes.error;

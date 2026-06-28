@@ -308,6 +308,16 @@ def get_cash_flows(db: Session) -> dict:
     }
 
 
+def list_asset_prices(db: Session, *, base_asset: str) -> list[dict]:
+    """Latest price per asset in the base asset, from price snapshots."""
+    base_asset = base_asset.strip().upper()
+    prices = _latest_prices_by_asset(db, base_asset=base_asset)
+    return [
+        {"asset_code": asset_code, "price": decimal_to_string(price)}
+        for asset_code, price in sorted(prices.items())
+    ]
+
+
 def list_symbols(db: Session) -> list[dict]:
     return [
         {
