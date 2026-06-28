@@ -286,18 +286,19 @@ export function DonutChart({
 export function DivergingBars({
   data,
   formatValue = (value: number) => fmtCompact(value),
-  limit = 12,
+  limit,
 }: {
   data: Array<{ label: string; value: number }>;
   formatValue?: (value: number) => string;
   limit?: number;
 }) {
-  const visible = data.slice(0, limit);
+  const visible = limit ? data.slice(0, limit) : data;
   if (visible.length === 0) return <ChartEmpty height={180} label="No data" />;
   const max = Math.max(...visible.map((point) => Math.abs(point.value)), 1);
   return (
-    <div className="diverging">
-      {visible.map((point) => {
+    <div className="list-scroll">
+      <div className="diverging">
+        {visible.map((point) => {
         const ratio = (Math.abs(point.value) / max) * 50;
         const positive = point.value >= 0;
         return (
@@ -317,7 +318,8 @@ export function DivergingBars({
             <strong className={positive ? "pnl-pos" : "pnl-neg"}>{formatValue(point.value)}</strong>
           </div>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }

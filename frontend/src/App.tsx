@@ -544,15 +544,17 @@ function OverviewPage({ api, reloadKey }: PageProps) {
             </div>
 
             <div className="grid-2">
-              <Panel title="Unrealized PnL by asset" subtitle="Including Earn rewards">
+              <Panel title="Unrealized PnL by asset" subtitle="Sorted by PnL · incl. Earn rewards">
                 <DivergingBars
-                  data={heldHoldings.map((item) => ({
-                    label: item.asset_code,
-                    value: toNumber(item.unrealized_pnl_including_rewards) ?? 0,
-                  }))}
+                  data={heldHoldings
+                    .map((item) => ({
+                      label: item.asset_code,
+                      value: toNumber(item.unrealized_pnl_including_rewards) ?? 0,
+                    }))
+                    .sort((a, b) => b.value - a.value)}
                 />
               </Panel>
-              <Panel title="Cost basis vs market value" subtitle="Top holdings">
+              <Panel title="Cost basis vs market value" subtitle="Sorted by market value">
                 <CostVsValue holdings={heldHoldings} />
               </Panel>
             </div>
@@ -605,7 +607,9 @@ function HeroStat({ label, value, sign, sub }: { label: string; value: string; s
 }
 
 function CostVsValue({ holdings }: { holdings: Holding[] }) {
-  const visible = holdings.filter((item) => toNumber(item.market_value)).slice(0, 8);
+  const visible = holdings
+    .filter((item) => toNumber(item.market_value))
+    .sort((a, b) => (toNumber(b.market_value) ?? 0) - (toNumber(a.market_value) ?? 0));
   if (visible.length === 0) return <EmptyState message="No holdings to compare." />;
   const max = Math.max(
     ...visible.flatMap((item) => [toNumber(item.cost_basis) ?? 0, toNumber(item.market_value) ?? 0]),
@@ -613,20 +617,24 @@ function CostVsValue({ holdings }: { holdings: Holding[] }) {
   );
   return (
     <div className="cost-value">
-      {visible.map((item) => {
-        const cost = toNumber(item.cost_basis) ?? 0;
-        const value = toNumber(item.market_value) ?? 0;
-        return (
-          <div className="cost-value-row" key={item.asset_code}>
-            <span className="cost-value-asset">{item.asset_code}</span>
-            <div className="cost-value-bars">
-              <span className="cv-bar cost" style={{ width: `${(cost / max) * 100}%` }} />
-              <span className="cv-bar value" style={{ width: `${(value / max) * 100}%` }} />
-            </div>
-            <strong className={`pnl-${signOf(value - cost)}`}>{fmtCompact(value - cost)}</strong>
-          </div>
-        );
-      })}
+      <div className="list-scroll">
+        <div className="cost-value-rows">
+          {visible.map((item) => {
+            const cost = toNumber(item.cost_basis) ?? 0;
+            const value = toNumber(item.market_value) ?? 0;
+            return (
+              <div className="cost-value-row" key={item.asset_code}>
+                <span className="cost-value-asset">{item.asset_code}</span>
+                <div className="cost-value-bars">
+                  <span className="cv-bar cost" style={{ width: `${(cost / max) * 100}%` }} />
+                  <span className="cv-bar value" style={{ width: `${(value / max) * 100}%` }} />
+                </div>
+                <strong className={`pnl-${signOf(value - cost)}`}>{fmtCompact(value - cost)}</strong>
+              </div>
+            );
+          })}
+        </div>
+      </div>
       <div className="cv-legend">
         <span>
           <i className="cv-dot cost" /> Cost basis
