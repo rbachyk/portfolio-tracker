@@ -3,7 +3,8 @@ import {
   ArrowLeftRight,
   BadgeDollarSign,
   CandlestickChart,
-  Coins,
+  Copy,
+  Download,
   Gauge,
   Layers,
   LineChart as LineChartIcon,
@@ -11,6 +12,7 @@ import {
   Moon,
   PiggyBank,
   RefreshCw,
+  Scale,
   Settings as SettingsIcon,
   Sun,
   TerminalSquare,
@@ -71,6 +73,7 @@ type Page =
   | "overview"
   | "holdings"
   | "lots"
+  | "rebalance"
   | "earn"
   | "deposits"
   | "performance"
@@ -86,6 +89,7 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
       { id: "overview", label: "Overview", icon: <Gauge size={18} /> },
       { id: "holdings", label: "Holdings", icon: <Wallet size={18} /> },
       { id: "lots", label: "Lots", icon: <Layers size={18} /> },
+      { id: "rebalance", label: "Rebalance", icon: <Scale size={18} /> },
     ],
   },
   {
@@ -112,6 +116,7 @@ const PAGE_META: Record<Page, { title: string; subtitle: string }> = {
   overview: { title: "Overview", subtitle: "Your portfolio at a glance" },
   holdings: { title: "Holdings", subtitle: "Per-asset positions and allocation" },
   lots: { title: "Lots", subtitle: "Open buy lots and cost basis (FIFO)" },
+  rebalance: { title: "Rebalance", subtitle: "Top up and rebalance toward target weights" },
   earn: { title: "Simple Earn", subtitle: "Earn positions and reward history" },
   deposits: { title: "Transfers", subtitle: "Deposits, withdrawals and funding" },
   performance: { title: "Performance", subtitle: "Equity, drawdown and snapshots" },
@@ -334,6 +339,7 @@ function Content({ page, api, reloadKey }: { page: Page; api: ApiClient; reloadK
   if (page === "overview") return <OverviewPage api={api} reloadKey={reloadKey} />;
   if (page === "holdings") return <HoldingsPage api={api} reloadKey={reloadKey} />;
   if (page === "lots") return <LotsPage api={api} reloadKey={reloadKey} />;
+  if (page === "rebalance") return <RebalancePage api={api} reloadKey={reloadKey} />;
   if (page === "earn") return <EarnPage api={api} reloadKey={reloadKey} />;
   if (page === "deposits") return <DepositsPage api={api} reloadKey={reloadKey} />;
   if (page === "performance") return <PerformancePage api={api} reloadKey={reloadKey} />;
@@ -866,6 +872,297 @@ function LotsPage({ api, reloadKey }: PageProps) {
         );
       }}
     </DataState>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rebalance — buy-only DCA top-up toward target weights (excluding USDT)
+// ---------------------------------------------------------------------------
+const MIN_NOTIONAL = 5; // USDT; Binance spot minimum is typically 5–10 per order
+
+type PlanRow = {
+  asset: string;
+  symbol: string;
+  weight: number | null; // normalized target weight (0..1); null when untargeted
+  currentValue: number;
+  currentPct: number;
+  price: number | null;
+  buyValue: number;
+  buyQty: number | null;
+  afterValue: number;
+  afterPct: number;
+};
+
+type RebalancePlan = {
+  rows: PlanRow[];
+  investedCurrent: number;
+  base: number;
+  deployed: number;
+  buys: number;
+  belowMin: number;
+  enabledTargets: number;
+};
+
+/**
+ * Cash-flow rebalancing: spend `contribution` buying only (never selling) to
+ * pull each asset's weight toward its normalized target. Targets define the
+ * desired split of the non-USDT (invested) portfolio.
+ */
+function computeRebalance(
+  holdings: Holding[],
+  targets: Array<{ asset_code: string; target_pct: string; is_enabled: boolean }>,
+  contribution: number,
+): RebalancePlan {
+  const nonCash = holdings.filter((item) => !CASH_ASSETS.has(item.asset_code));
+  const holdingByAsset = new Map(nonCash.map((item) => [item.asset_code, item]));
+  const investedCurrent = nonCash.reduce((sum, item) => sum + (toNumber(item.market_value) ?? 0), 0);
+  const base = investedCurrent + Math.max(contribution, 0);
+
+  const enabled = targets.filter((t) => t.is_enabled && (toNumber(t.target_pct) ?? 0) > 0);
+  const weightSum = enabled.reduce((sum, t) => sum + (toNumber(t.target_pct) ?? 0), 0);
+  const weightByAsset = new Map(
+    enabled.map((t) => [t.asset_code, weightSum > 0 ? (toNumber(t.target_pct) ?? 0) / weightSum : 0]),
+  );
+
+  const assets = Array.from(
+    new Set([...nonCash.map((item) => item.asset_code), ...enabled.map((t) => t.asset_code)]),
+  );
+
+  const deficit = new Map<string, number>();
+  let sumDeficit = 0;
+  for (const asset of assets) {
+    const weight = weightByAsset.get(asset) ?? 0;
+    const current = toNumber(holdingByAsset.get(asset)?.market_value) ?? 0;
+    const gap = Math.max(0, weight * base - current);
+    deficit.set(asset, gap);
+    sumDeficit += gap;
+  }
+
+  const rows: PlanRow[] = assets.map((asset) => {
+    const holding = holdingByAsset.get(asset);
+    const weight = weightByAsset.get(asset) ?? 0;
+    const current = toNumber(holding?.market_value) ?? 0;
+    const price = toNumber(holding?.current_price);
+    let buyValue = 0;
+    if (contribution > 0) {
+      if (sumDeficit <= 1e-9) buyValue = weight * contribution;
+      else if (sumDeficit <= contribution) buyValue = (deficit.get(asset) ?? 0) + weight * (contribution - sumDeficit);
+      else buyValue = (contribution * (deficit.get(asset) ?? 0)) / sumDeficit;
+    }
+    const afterValue = current + buyValue;
+    return {
+      asset,
+      symbol: `${asset}${QUOTE_ASSET}`,
+      weight: weightByAsset.has(asset) ? weight : null,
+      currentValue: current,
+      currentPct: investedCurrent > 0 ? current / investedCurrent : 0,
+      price,
+      buyValue,
+      buyQty: price && price > 0 ? buyValue / price : null,
+      afterValue,
+      afterPct: base > 0 ? afterValue / base : 0,
+    };
+  });
+
+  rows.sort((a, b) => b.buyValue - a.buyValue || b.afterValue - a.afterValue);
+
+  const buyRows = rows.filter((row) => row.buyValue > 0);
+  return {
+    rows,
+    investedCurrent,
+    base,
+    deployed: buyRows.reduce((sum, row) => sum + row.buyValue, 0),
+    buys: buyRows.length,
+    belowMin: buyRows.filter((row) => row.buyValue < MIN_NOTIONAL).length,
+    enabledTargets: enabled.length,
+  };
+}
+
+function orderLines(rows: PlanRow[]): string {
+  return rows
+    .filter((row) => row.buyValue > 0)
+    .map(
+      (row) =>
+        `BUY ${row.symbol}  qty ${row.buyQty !== null ? row.buyQty.toFixed(8) : "—"}  (~${row.buyValue.toFixed(2)} ${QUOTE_ASSET})  @ ${row.price !== null ? row.price : "market"}`,
+    )
+    .join("\n");
+}
+
+function orderCsv(rows: PlanRow[]): string {
+  const header = "symbol,side,type,quantity,quote_usdt,price";
+  const lines = rows
+    .filter((row) => row.buyValue > 0)
+    .map(
+      (row) =>
+        `${row.symbol},BUY,MARKET,${row.buyQty !== null ? row.buyQty.toFixed(8) : ""},${row.buyValue.toFixed(2)},${row.price ?? ""}`,
+    );
+  return [header, ...lines].join("\n");
+}
+
+function RebalancePage({ api, reloadKey }: PageProps) {
+  const holdingsRes = useResource<{ holdings: Holding[] }>(() => api.get("/portfolio/holdings"), [api, reloadKey]);
+  const settingsRes = useResource<SettingsPayload>(() => api.get("/settings"), [api, reloadKey]);
+  const [amount, setAmount] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const holdings = holdingsRes.data?.holdings ?? [];
+  const targets = settingsRes.data?.target_allocations ?? [];
+  const cashValue = holdings
+    .filter((item) => CASH_ASSETS.has(item.asset_code))
+    .reduce((sum, item) => sum + (toNumber(item.market_value) ?? 0), 0);
+
+  const plan = useMemo(() => computeRebalance(holdings, targets, amount), [holdings, targets, amount]);
+
+  if (holdingsRes.isLoading || settingsRes.isLoading) return <SkeletonStack rows={4} />;
+  const err = holdingsRes.error || settingsRes.error;
+  if (err) return <div className="state-block error">{err}</div>;
+
+  async function copyOrders() {
+    try {
+      await navigator.clipboard.writeText(orderLines(plan.rows));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  function downloadCsv() {
+    const blob = new Blob([orderCsv(plan.rows)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "rebalance-plan.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const chips = [100, 250, 500, 1000, 2500];
+  const afterSlices: DonutSlice[] = plan.rows
+    .filter((row) => row.afterValue > 0)
+    .slice(0, 9)
+    .map((row) => ({ label: row.asset, value: row.afterValue, color: colorForAsset(row.asset) }));
+
+  return (
+    <div className="page-stack">
+      <Panel title="Amount to add" subtitle="New capital to deploy as a buy-only rebalance">
+        <div className="rebalance-input">
+          <div className="amount-field">
+            <span className="amount-prefix">{QUOTE_ASSET}</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={amount || ""}
+              placeholder="0.00"
+              onChange={(event) => setAmount(Math.max(0, Number(event.target.value) || 0))}
+              aria-label="Amount to add"
+            />
+          </div>
+          <div className="chips">
+            {chips.map((value) => (
+              <button key={value} type="button" className="chip" onClick={() => setAmount(value)}>
+                +{value.toLocaleString()}
+              </button>
+            ))}
+            {cashValue > 0 ? (
+              <button
+                type="button"
+                className="chip accent"
+                onClick={() => setAmount(Math.floor(cashValue))}
+                title="Deploy your idle stablecoin balance"
+              >
+                Use idle cash · {fmtCompact(cashValue)}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </Panel>
+
+      {plan.enabledTargets === 0 ? (
+        <EmptyState
+          title="No target allocations yet"
+          message="Set target weights for your assets on the Settings page, then come back to plan a rebalance."
+        />
+      ) : amount <= 0 ? (
+        <EmptyState title="Enter an amount" message="Add the amount you want to invest to see the buy plan." />
+      ) : (
+        <>
+          <div className="tile-grid">
+            <StatTile label="Deploying" value={fmtMoney(plan.deployed)} unit={QUOTE_ASSET} />
+            <StatTile label="Orders" value={String(plan.buys)} hint="Buy-only · no sells" />
+            <StatTile label="Invested after" value={fmtMoney(plan.base)} unit={QUOTE_ASSET} hint="Excludes USDT" />
+            <StatTile
+              label="Below min"
+              value={String(plan.belowMin)}
+              sign={plan.belowMin > 0 ? "neg" : undefined}
+              hint={`< ${MIN_NOTIONAL} ${QUOTE_ASSET} per order`}
+            />
+          </div>
+
+          <div className="grid-2">
+            <Panel
+              title="Buy plan"
+              subtitle="Sorted by buy size · steers toward target"
+              action={
+                <div className="panel-actions">
+                  <Button variant="secondary" onClick={copyOrders}>
+                    <Copy size={15} /> {copied ? "Copied" : "Copy"}
+                  </Button>
+                  <Button variant="secondary" onClick={downloadCsv}>
+                    <Download size={15} /> CSV
+                  </Button>
+                </div>
+              }
+            >
+              <SortableTable
+                caption={`Values in ${QUOTE_ASSET}`}
+                columns={[
+                  "Asset",
+                  { label: "Price", align: "right" },
+                  { label: "Current", align: "right" },
+                  { label: "Target", align: "right" },
+                  { label: "Buy", align: "right" },
+                  { label: "Qty", align: "right" },
+                  { label: "After", align: "right" },
+                ]}
+                rows={plan.rows.map((row) => ({
+                  key: row.asset,
+                  cells: [
+                    <span className="asset-tag">{row.asset}</span>,
+                    <span className="num">{fmtPrice(row.price)}</span>,
+                    <span className="num">{fmtPct(row.currentPct)}</span>,
+                    row.weight !== null ? <span className="num">{fmtPct(row.weight)}</span> : <span className="muted">—</span>,
+                    <span className="num strong">{row.buyValue > 0 ? fmtMoney(row.buyValue) : "—"}</span>,
+                    row.buyValue <= 0 ? (
+                      <span className="muted">—</span>
+                    ) : row.buyQty !== null ? (
+                      <span className="num">{fmtQty(row.buyQty)}</span>
+                    ) : (
+                      <Badge tone="warn">no price</Badge>
+                    ),
+                    <span className="num muted">{fmtPct(row.afterPct)}</span>,
+                  ],
+                  sortValues: [row.asset, row.price, row.currentPct, row.weight, row.buyValue, row.buyQty, row.afterPct],
+                }))}
+              />
+            </Panel>
+
+            <Panel title="Allocation after" subtitle="Invested weights once orders fill">
+              <DonutChart slices={afterSlices} centerLabel="Invested" formatValue={(value) => fmtCompact(value)} />
+            </Panel>
+          </div>
+
+          <p className="footnote">
+            Pure DCA — the plan only buys, never sells, steering each weight toward target with the new capital.
+            Quantities use the latest synced price; re-check on Binance before ordering.
+            {plan.belowMin > 0
+              ? ` ${plan.belowMin} order(s) fall below the ~${MIN_NOTIONAL} ${QUOTE_ASSET} minimum and may be rejected.`
+              : ""}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
