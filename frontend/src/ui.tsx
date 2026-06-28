@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
-import { ButtonHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
+import { ButtonHTMLAttributes, isValidElement, ReactNode, useEffect, useMemo, useState } from "react";
 
 import { Sign } from "./format";
 
@@ -199,9 +199,14 @@ export function SortableTable({
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
+    const valueFor = (row: TableRow) => {
+      const explicit = row.sortValues?.[sort.index];
+      if (explicit !== undefined && explicit !== null) return explicit;
+      return nodeText(row.cells[sort.index]);
+    };
     return [...rows].sort((left, right) => {
-      const leftValue = normalizeSortValue(left.sortValues?.[sort.index]);
-      const rightValue = normalizeSortValue(right.sortValues?.[sort.index]);
+      const leftValue = normalizeSortValue(valueFor(left));
+      const rightValue = normalizeSortValue(valueFor(right));
       const result =
         typeof leftValue === "number" && typeof rightValue === "number"
           ? leftValue - rightValue
@@ -334,14 +339,20 @@ export function SimpleTable({
       pageSize={pageSize}
       caption={caption}
       rows={rows.map((row, rowIndex) => ({
-        key: `${rowIndex}-${row.map((cell) => (typeof cell === "string" || typeof cell === "number" ? cell : "")).join("|")}`,
+        key: `${rowIndex}-${row.map(nodeText).join("|")}`,
         cells: row,
-        sortValues: row.map((cell) =>
-          typeof cell === "string" || typeof cell === "number" ? cell : "",
-        ),
       }))}
     />
   );
+}
+
+/** Extract sortable/searchable plain text from any cell node. */
+function nodeText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join(" ");
+  if (isValidElement(node)) return nodeText((node.props as { children?: ReactNode }).children);
+  return "";
 }
 
 function normalizeSortValue(value: SortValue): string | number {

@@ -1045,7 +1045,11 @@ thead th {
 }
 
 th.align-right .sort-button {
-  margin-left: auto;
+  justify-content: flex-end;
+}
+
+th.align-center .sort-button {
+  justify-content: center;
 }
 
 td {
@@ -1086,7 +1090,8 @@ td.align-right .pnl-flat {
   background: transparent;
   border: 0;
   color: inherit;
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   gap: 5px;
   padding: 0;
   white-space: nowrap;
